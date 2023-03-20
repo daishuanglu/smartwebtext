@@ -21,4 +21,7 @@ numba
 sentence-transformers
 tensorboard
 pybackground
+pims
+av
+timm
 # How to use tensorboard: tensorboard --logdir=$EVENTS_FOLDER

@@ -5,7 +5,7 @@ import pandas as pd
 from preprocessors import pipelines
 from utils import train_utils
 from utils import data_utils
-from models import vae_doc_generator
+from models import video_text
 
 
 def main():

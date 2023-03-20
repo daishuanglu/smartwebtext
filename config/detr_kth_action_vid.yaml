@@ -1,0 +1,11 @@
+
+
+
+
+lr: 1e-4
+lr_backbone: 1e-5
+weight_decay: 1e-4
+num_labels: 6
+max_steps: 300
+gradient_clip_val: 0.1
+epochs: 50

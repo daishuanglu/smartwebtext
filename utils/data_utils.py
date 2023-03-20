@@ -5,8 +5,7 @@ import pandas as pd
 from scipy import sparse
 import numpy as np
 from torch.utils.data import DataLoader
-
-
+from typing import Dict, Callable
 def randsample_df_by_group_rate(df, group_cols, rate):
     sample_info = (df.groupby(group_cols).size()*rate).round(0).astype(int)
     mapper = sample_info.to_dict()
@@ -28,10 +27,10 @@ def randsample_df_by_group_size(df, group_cols, size=10):
     df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
     return df
 
-
 class CSVDataset(torch.utils.data.Dataset):
     def __init__(self, path, features_desc, nb_samples, sep=',',
-                 clrCache=False, to_input_example=False, max_line = 10**7):
+                 clrCache=False, to_input_example=False, max_line = 10**7,
+                 col_fns: Dict[str, Callable] = dict()):
         self.file = path
         self.len = nb_samples
         self.sep = sep
@@ -45,12 +44,15 @@ class CSVDataset(torch.utils.data.Dataset):
             self.get_item_fn = lambda line: self.get_dict_feature(line)
         with open(self.file,'r') as f:
             self.headers = next(f).rstrip().split(sep)
+        self.col_fns = col_fns
 
     def get_dict_feature(self, line):
         feature = {k: self.features[k](v) for k, v in zip(
                 self.headers,
                 line.rstrip().split(self.sep)
             ) if k in self.features.keys()}
+        for output_key, fn in self.col_fns.items():
+            feature[output_key] = fn(feature)
         return feature
 
     def get_sbert_inp_feature(self, line):
@@ -105,7 +107,7 @@ def get_sbert_csv_evaluator_dataset(data_path, ref_col, context_col, query_col,
 
 def get_context_csv_data_loader(data_path, features_desc, batch_size=2048,
                                 clear_cache=True, shuffle=False, sep=',', max_line=10**7, limit=None,
-                                to_sbert_input=False):
+                                to_sbert_input=False, col_fns=dict()):
     nb_samples = sum(1 for _ in open(data_path, 'r'))-1 if limit is None else limit
     print("%s: %d samples." % (data_path, nb_samples))
     if limit is not None:
@@ -123,7 +125,8 @@ def get_context_csv_data_loader(data_path, features_desc, batch_size=2048,
         clrCache=clear_cache,
         sep=sep,
         to_input_example=to_sbert_input,
-        max_line=max_line)
+        max_line=max_line,
+        col_fns=col_fns)
     return torch.utils.data.DataLoader(
         tensor_data,
         collate_fn=collate_dict,

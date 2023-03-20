@@ -12,6 +12,11 @@ PRNEWS_PARAGRAPH_SEP = ';;;;'
 PRNEWS_DATA_SEP = '\t'
 PRNEWS_MUST_CONTAIN_COLS = ['Text', 'Company']
 
+KTH_ACTION_SRC_CSV = 'data_model/kth_actions.csv'
+KTH_ACTIONS = ['boxing', 'handclapping', 'handwaving', 'jogging', 'running', 'walking']
+KTH_ACTION_DATA_CSV_SEP = ','
+KTH_SPLIT_COL = 'split'
+KTH_SPLIT_CSV = 'data_model/kth_actions_{split}.csv'
 
 def prnews_text_preproc(s):
     stopwords = string_utils.load_stopwords()
@@ -55,6 +60,13 @@ def prnews(output_files, split_ratio, vocab_path):
     textfile.vocab(['Company'], vocab_path)
     return
 
+def kth_action_video():
+    textfile = dataloader.PandasTextFile(fpath=KTH_ACTION_SRC_CSV, sep=KTH_ACTION_DATA_CSV_SEP)
+    df = textfile.all()
+    for split in df[KTH_SPLIT_COL].unique():
+        df[df[KTH_SPLIT_COL] == split].to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
+        print('KTH action ', split, 'set: ', len(df), 'samples')
+    return
 
 def eval_example_sentences(
         fpath, text_col, row_delimiter, multi_sent_seps, preproc_sep, preproc_fn=None):

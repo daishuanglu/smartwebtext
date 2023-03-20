@@ -137,13 +137,3 @@ class PandasTextFile(BaseTextFile):
         dfs = pd.concat(dfs, ignore_index=True)
         dfs = self._apply_col_fns(dfs)
         return dfs[~na_pandas_rows(dfs, self.must_contain_cols)]
-
-
-def example_eval_sentences(fpath, text_col, special_sep=[';;', '...']):
-    df = pd.read_csv(fpath)
-    df[text_col] = df[text_col].str.lower()
-    for sep in special_sep:
-        df[text_col] = df[text_col].str.replace(sep, ' ')
-    df[text_col] = df[text_col].str.split().apply(lambda x: ' '.join(x))
-    df[text_col] = df[text_col].str.strip()
-    return df
