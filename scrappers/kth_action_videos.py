@@ -5,13 +5,14 @@ from transformers import pipeline
 from PIL import Image
 from tqdm import tqdm
 
+
 OBJ_DETECTOR = pipeline(model="facebook/detr-resnet-50")
 ZS_OBJ_DETECTOR = pipeline(model="google/owlvit-base-patch32", task="zero-shot-object-detection")
 
+# download and unzip KTH action videos from here https://www.csc.kth.se/cvap/actions/
 KTH_ACTION_HOME = 'C:\\Users\\shud0\\KTHactions'
 KTH_VIDEO_FILE = '{action}/person{pid}_{action}_{var}_uncomp.avi'
 KTH_ACTIONS = ['boxing', 'handclapping', 'handwaving', 'jogging', 'running', 'walking']
-
 
 def get_synthetic_bboxes(vid_file_path, fids, labels=['person']):
     v = pims.Video(vid_file_path)
