@@ -8,7 +8,7 @@ tmp/
 .cache
 data/
 fasttext/
-__pycache__/
+**/__pycache__/*
 *.ipynb_checkpoints/
 # filetype to ignore
 *.pyc
