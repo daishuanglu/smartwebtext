@@ -1,0 +1,28 @@
+<label class="col-md-4 control-label" for="checkboxes"><!--Qnum--> Does <!--company--> adopt the following business strategy?</label> Use your common sense and/or check the TITLEs of the press announcement here (JUST ONLY BROWSE THE TITLEs):
+  <ExternalURL><a href="<!--link-->"><!--link--></a> </ExternalURL>
+  <div class="col-md-4">
+  <div class="checkbox">
+    <label for="checkboxes-<!--box-->">
+      <input type="checkbox" name="checkboxes" id="checkboxes-<!--box-->" value="<!--value-->">
+      data analytics
+    </label>
+	</div>
+  <div class="checkbox">
+    <label for="checkboxes-<!--box-->">
+      <input type="checkbox" name="checkboxes" id="checkboxes-<!--box-->" value="<!--value-->">
+      innovation
+    </label>
+	</div>
+  <div class="checkbox">
+    <label for="checkboxes-<!--box-->">
+      <input type="checkbox" name="checkboxes" id="checkboxes-<!--box-->" value="<!--value-->">
+      technology
+    </label>
+	</div>
+	<div class="checkbox">
+    <label for="checkboxes-<!--box-->">
+      <input type="checkbox" name="checkboxes" id="checkboxes-<!--box-->" value="<!--value-->">
+      None of the above
+    </label>
+	</div>
+  </div>

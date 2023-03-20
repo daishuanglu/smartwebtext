@@ -1,0 +1,29 @@
+model_name: 'acct_tte_sent_small'
+skip_prep_data: True
+# data path for dataloader creation and model training-validation-testing
+#saved_model_path:  "data_model/model/cf_model-epoch16-val_loss0.00.ckpt"
+raw_data_path: "data_model/acct_ner_cleaned_title.csv"
+vocab_path: "data_model/acct_tte_vocab.txt"
+preproc_data_path: "data_model/cached_acct_tte_sent_training_data.csv"
+
+train_data_path: "data_model/acct_tte_training_data.csv"
+val_data_path: "data_model/acct_tte_validation_data.csv"
+item_vocab_path: "data_model/acct_tte_sent_small_item_vocab.json"
+clear_cache: True
+resume_ckpt: False
+
+# CF model parameters
+skip_training: True
+train_test_split_ratio: 0.002
+monitor: "val_loss"
+score_col: "scores"
+query_col: "Text"
+ref_col: "Company"
+embed_size: 256
+max_query_length: 128
+logger_dir: "./lightning_logs"
+learning_rate: 0.0001
+batch_size: 256
+epochs: 50
+limit:
+MTurk_eval_csv: "professional/eval_tics.csv"

@@ -1,0 +1,37 @@
+model_name: 'cond_vae_gen'
+logger_dir: 'lightning_logs'
+skip_prep_data: True
+train_data_path: "data_model/vae_gen_training.csv"
+val_data_path: "data_model/vae_gen_validation.csv"
+user_vocab_path:  "data_model/vae_user_vocab.json"
+train_val_split_ratio: [0.98, 0.02]
+text_col: "Text"
+ref_col: "Company"
+limit:
+
+skip_training: False
+clear_cache: True
+bert_model_name: 'distilbert-base-uncased'
+min_word_cnt: 30
+en1_units: 128
+en2_units: 256
+num_topic: 32
+batch_size: 32
+learning_rate: 0.001
+momentum: 0.99
+init_mult: 1.0
+variance: 0.995
+max_doc_length: 512
+
+epochs: 50
+resume_ckpt: True
+monitor: 'val_perp'
+
+monte_carlo_steps: 1000
+test_batch_size: 1024
+analytics_examples:
+  fpath: 'professional/analytics_examples.csv'
+  text_col: 'related_paragraphs'
+  row_delimiter: ','
+  multi_sent_seps: ['...', '\n']
+  preproc_sep: ';;;;'

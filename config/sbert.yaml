@@ -1,0 +1,37 @@
+model_name: 'sbert'
+# Training data preparation, set to False if the train-val data has been generated
+skip_prep_data: True
+raw_data_path: "data_model/ner_cleaned_title.csv"
+vocab_path: "data_model/cf_vocab.txt"
+preproc_data_path: "data_model/cached_training_data.csv"
+
+# data path for dataloader creation and model training-validation-testing
+eval_query_only: True
+saved_model_path: "data_model/cf_small_context_model.pth"
+train_data_path: "data_model/cf_training_data_unnorm.csv"
+train_data_parts: "data_model/cf_small_training_data_part*.csv"
+val_data_path: "data_model/cf_validation_data_unnorm.csv"
+test_data_path: "data_model/cf_tmp_test_data_unnorm.csv"
+eval_data_path: "data_model/cf_eval_data_unnorm.csv"
+clear_cache: True
+resume_ckpt: True
+num_parts: 10
+suhffle_parts: False
+
+# CF model parameters
+skip_training: False
+score_col: "scores"
+query_col: "phrase"
+context_col: "Text"
+ref_col: "Company"
+logger_dir: "./lightning_logs"
+#base_model: 'distilbert-base-nli-mean-tokens'
+embed_size: 128
+learning_rate: 0.0001
+batch_size: 16
+epochs: 5
+warmup_steps: 100
+special_sep: '[DOC]'
+limit:
+eval_batch_size: 1024
+MTurk_eval_csv: "MTurk/MTurk_eval_tics.csv"

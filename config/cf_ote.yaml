@@ -1,0 +1,33 @@
+model_name: 'cf_ote'
+# Training data preparation, set to False if the train-val data has been generated
+skip_prep_data: True
+raw_data_path: "data_model/ner_cleaned_title.csv"
+vocab_path: "data_model/cf_vocab.txt"
+preproc_data_path: "data_model/cached_training_data.csv"
+# data path for dataloader creation and model training-validation-testing
+saved_model_path: "data_model/ote_context_model.pth"
+train_data_path: "data_model/cf_training_data.csv"
+train_data_parts: "data_model/cf_training_data_part*.csv"
+val_data_path: "data_model/cf_validation_data.csv"
+test_data_path: "data_model/cf_tmp_test_data.csv"
+eval_data_path: "data_model/cf_eval_data.csv"
+clear_cache: True
+resume_ckpt: False
+num_parts: 100
+suhffle_parts: False
+
+# CF model parameters
+skip_training: False
+score_col: "scores"
+query_col: "phrase"
+context_col: "Text"
+ref_col: "Company"
+max_sequence_length: 128
+logger_dir: "./lightning_logs"
+sentence_pooling: "mean_pooling"
+learning_rate: 0.0001
+batch_size: 64
+epochs: 5
+limit:
+
+MTurk_eval_csv: "MTurk/MTurk_eval_tics.csv"

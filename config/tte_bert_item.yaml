@@ -1,0 +1,26 @@
+model_name: 'tte_bert_item_small'
+skip_prep_data: True
+# data path for dataloader creation and model training-validation-testing
+train_data_path: "data_model/tte_training_data_unnorm.csv"
+val_data_path: "data_model/tte_validation_data_unnorm.csv"
+item_vocab_path: "data_model/tte_item_vocab.json"
+eval_data_path: "data_model/cf_eval_data_unnorm.csv"
+clear_cache: True
+resume_ckpt: False
+
+# CF model parameters
+skip_training: False
+split_date: True
+train_test_split_ratio: 0.01
+monitor: "val_loss"
+score_col: "scores"
+query_col: "phrase"
+ref_col: "Company"
+embed_size: 256
+max_query_length: 16
+logger_dir: "./lightning_logs"
+learning_rate: 0.0001
+batch_size: 2048
+epochs: 50
+limit:
+MTurk_eval_csv: "MTurk/MTurk_eval_tics.csv"

@@ -1,0 +1,43 @@
+model:
+  name: "fasttext_embedding_model"
+  load_embedding: True
+  load_embedding_imp:
+
+global:
+  n_topics: 100
+  model_path: "data_model/model/fasttext_embedding_model_global.bin"
+  embedding_path: "data_model/model/fasttext_embedding_model_global.emb"
+
+local:
+  min_num_doc_per_topic: 10
+  min_word_count: 2
+  min_word_len: 2
+  model_path: "data_model/model/fasttext_embedding_model_local.bin"
+  embedding_path: "data_model/model/fasttext_embedding_model_local.emb"
+
+Imputor:
+#  load_pretrained: False
+#  model_path: "D:/tmp_model/fasttext_imputor"
+#  imputed_emb_path: "D:/tmp_model/fasttext_trm_uni_emb_imp"
+#  candidate_prob_column: # for handling sampling rate
+#  learning_rate: 0.001
+#  temperature: 10
+#  metrics_k_all: [1, 5, 20]
+#  epochs: 30
+#  embed_dim: 256
+#  batch_size: 2048
+
+TRM:
+  uni_emb: "D:/tmp_model/fasttext_trm_uni_emb"
+  uni_vocab: "D:/tmp_model/fasttext_trm_uni_vocab"
+  emb_mask: "D:/tmp_model/fasttext_trm_uni_emb_mask"
+  pdist_chunk_size: 100000
+  global:
+    eps: 0.5
+    min_samples: 5
+    model_path: "data_model/model/fasttext_embedding_model_global_trm"
+  local:
+    eps: 0.2
+    min_samples: 3
+    model_path: "data_model/model/fasttext_embedding_model_local_trm"
+

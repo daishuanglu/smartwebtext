@@ -1,0 +1,373 @@
+tic,analytics,innovation,technology,company
+ABT,1,1,1,abbott
+ABBV,0,1,1,abbvie
+EURX,1,1,1,aercap holdings n.v.
+AES,1,1,1,aes corp.
+AEMD,1,1,0,aethlon medical inc.
+ADC,0,1,0,agree realty corporation
+ACRN,1,1,0,air products
+ALG,1,0,1,alamo group inc.
+ALK,0,1,1,alaska air group
+ARE,0,1,1,alexandria real estate equities inc.
+ALLY,1,1,1,ally financial
+ALTR,1,1,1,altair
+AYX,1,0,1,alteryx inc.
+AEE,0,1,1,ameren missouri
+AEP,1,1,1,american electric power
+AME,1,1,0,ametek inc.
+AMGN,0,1,1,amgen
+AMAG,0,1,1,ampio pharmaceuticals inc.
+ATEX,1,1,0,anterix inc.
+AR,1,0,1,antero resources corporation
+AON,1,1,0,aon plc
+ASC,1,1,0,ardmore shipping corporation
+ARLO,1,1,1,arlo technologies inc.
+AJG,0,0,1,arthur j. gallagher  co.
+ASPN,1,1,1,aspen aerogels inc.
+ACST,0,1,1,astellas pharma inc.
+QGOG,0,1,1,atento s.a.
+ATCX,0,1,1,atlas corp.
+ALV,1,1,0,autoliv
+AN,0,1,1,autonation inc.
+AVNS,0,1,0,avanos medical inc.
+AXTA,0,1,1,axalta coating systems ltd.
+AZRE,0,1,1,azure power
+LMIA,1,1,0,ball aerospace
+BLDP,0,1,1,ballard power systems inc.
+BALY,0,1,1,ballys corporation
+BLX,0,1,1,banco latinoamericano de comercio exterior s.a. bladex
+BAC,0,1,1,bank of america corporation
+BDX,1,1,1,bd becton dickinson and company
+BBBY,1,1,0,bed bath  beyond
+BELM,1,1,1,bell canada
+BHE,1,1,1,benchmark electronics inc.
+BHIL,1,1,0,benson hill
+BGRH,0,1,0,berger montague
+BBY,0,1,1,best inc.
+BGCP,1,1,1,bgc partners inc.
+BIG,0,1,0,big lots inc.
+BH,0,1,0,biglari holdings inc.
+BHVN,1,1,1,biohaven pharmaceutical holding company ltd.
+BKI,1,1,1,black knight inc.
+BL,0,1,1,blackline
+AMBC,1,0,1,bmo financial group
+BA,0,1,1,boeing
+BSX,0,1,0,boston scientific corporation
+BHR,1,1,0,braemar hotels  resorts inc.
+BCLI,1,1,1,brainstorm cell therapeutics inc.
+BKD,1,0,1,brookdale senior living inc.
+CAE,0,1,1,cae inc.
+CZR,1,0,0,caesars entertainment inc.
+ELY,1,1,0,callaway golf company
+CP,1,0,1,canadian pacific
+CSIQ,1,0,1,canadian solar inc.
+CRNS,1,1,0,canon u.s.a. inc.
+COF,1,1,1,capital one financial corporation
+CTT,1,1,1,catchmark timber trust inc.
+CAT,1,1,1,caterpillar inc.
+CDR,1,1,1,cedar realty trust inc.
+CNP,1,0,1,centerpoint energy inc.
+GIB,1,0,1,cgi inc.
+CMCM,0,1,1,cheetah mobile
+CHK,0,1,1,chesapeake energy corporation
+CHNR,0,1,1,china natural resources inc.
+CYD,1,1,0,china yuchai international limited
+CMG,0,1,0,chipotle mexican grill
+CHH,1,1,0,choice hotels international inc.
+CB,0,1,0,chubb
+CSCO,1,0,1,cisco systems inc.
+CIA,1,1,0,citizens inc.
+CCO,1,1,0,clear channel outdoor
+BROG,0,0,1,cms energy
+CNX,0,1,1,cnx resources corporation
+CNS,0,1,1,cohen  steers
+DHC,1,1,0,community healthcare trust inc.
+CAG,0,1,1,conagra brands inc.
+AMEH,1,1,0,concord medical services holdings limited
+CEIX,1,1,0,consol energy inc.
+CLR,1,1,1,continental resources
+CPRT,1,0,1,copart inc.
+CBRL,1,1,1,cracker barrel old country store inc.
+CRGY,1,1,1,crescent point energy corp.
+CROX,0,1,0,crocs inc.
+CCK,1,1,1,crown holdings inc.
+CRWS,0,1,1,crown royal
+HLTH,1,1,1,cue health inc.
+VALU,1,1,1,cunard line
+AXLA,1,0,1,cvs health
+CVS,0,1,1,cvs health corporation
+DAN,1,1,1,dana incorporated
+DQ,1,1,1,daqo new energy corp.
+DRI,1,1,0,darden restaurants inc. general
+DAR,0,1,1,darling ingredients inc.
+LLGX,0,1,1,delek logistics
+DELL,1,1,1,dell technologies
+DAL,1,1,0,delta air lines
+DHX,1,1,0,dhi group inc.
+DKS,0,1,1,dicks sporting goods
+DLR,1,1,1,digital realty
+DISH,1,1,0,dish network corporation
+DOCU,1,1,1,docusign inc.
+DPZ,1,0,1,dominos pizza inc.
+DASH,0,1,1,doordash
+LPG,1,1,1,dorian lpg ltd.
+DOV,1,1,0,dover
+DUK,1,1,0,duke energy
+DPMI,1,1,0,dupont
+DVAX,0,1,1,dynavax technologies
+EAST,0,1,0,eastside distilling inc.
+EW,1,0,1,edwards lifesciences corporation
+ESRT,0,1,0,empire state realty trust inc.
+ENR,0,1,0,energizer holdings inc.
+ENLC,0,1,1,enlink midstream llc
+ENVA,1,1,1,enova international inc.
+ENV,1,1,0,envestnet inc.
+NVST,1,1,0,envista holdings corporation
+EOG,0,1,1,eog resources inc.
+EQT,1,1,1,eqt corporation
+EFX,1,0,0,equifax inc.
+EQIX,1,1,0,equinix inc.
+ERIE,1,1,0,erie indemnity company
+EPIX,1,1,1,essa pharma inc
+EVH,1,1,0,evolent health
+EXR,0,1,0,extra space storage inc.
+FARM,1,1,1,farmer mac
+FTHM,1,0,1,fathom events
+FRT,1,0,0,federal realty investment trust
+FSS,1,1,0,federal signal corporation
+FNF,1,0,0,fidelity national financial inc.
+ACOM,1,1,0,financialnewsmedia.com
+FFIN,1,1,0,first financial bankshares inc.
+FE,1,1,0,firstenergy corp.
+FBC,0,1,0,flagstar bancorp inc.
+FTK,1,1,0,flotek industries inc.
+FL,1,1,1,foot locker inc.
+FTFT,1,1,1,future fintech group inc.
+WILC,0,1,1,g. willi__food international ltd.
+GLMD,1,1,0,galmed pharmaceuticals ltd.
+GTES,0,1,1,gates
+G,1,1,0,genpact
+GPC,0,1,1,genuine parts company
+DNA,0,1,0,ginkgo bioworks
+GSMG,1,1,0,glory star new media group holdings limited
+GDDY,0,1,1,godaddy inc.
+GOGO,0,1,1,gogo inc.
+GPRO,0,1,1,gopro inc.
+GEF,0,1,1,greif inc.
+GTBP,0,0,1,gt biopharma inc.
+HBB,0,0,1,hamilton beach brands holding company
+HA,0,1,1,hawaiian holdings inc.
+HTA,0,1,0,healthcare trust of america inc.
+PEAK,1,1,1,healthpeak properties inc.
+HSII,1,1,0,heidrick  struggles international inc.
+HRTG,1,1,0,heritage insurance holdings inc.
+HSKA,0,1,0,heska corporation
+HMLP,1,0,1,hoegh lng partners lp
+HON,0,1,1,honeywell
+HRL,0,1,1,hormel foods corporation
+HMHC,1,1,0,houghton mifflin harcourt
+HNP,1,0,1,huaneng power international inc.
+HUBS,1,1,1,hubspot
+HUN,1,1,1,huntsman corporation
+HUT,0,1,1,hut 8 mining corp
+HYMC,0,1,0,hycroft mining holding corporation
+HY,1,1,0,hyster__yale materials handling inc.
+IAC,1,1,0,iac
+ILMN,0,1,0,illumina inc.
+ICD,0,1,1,independence contract drilling inc.
+INST,0,1,1,instructure
+IP,0,1,0,international paper
+IVZ,0,1,1,invesco ltd.
+ISBC,1,0,0,investors bancorp inc.
+IONS,0,1,0,ionis pharmaceuticals inc.
+IRS,0,1,1,irsa inversiones y representaciones s.a.
+JKHY,1,1,0,jack henry  associates inc.
+JAZZ,0,1,1,jazz pharmaceuticals plc
+PHCF,0,1,1,john hancock investment management
+JCI,1,1,0,johnson controls international plc
+BEEM,0,1,1,kar global
+KMT,0,1,1,kennametal inc.
+KEN,0,1,1,kenon holdings ltd.
+KEY,1,0,0,keycorp
+KRP,0,1,1,kimbell royalty partners lp
+KMB,1,0,1,kimberly__clark
+KFS,1,1,1,kingsway financial services inc.
+WIFI,0,1,1,kore wireless
+KRA,1,1,0,kraton corporation
+KD,1,1,0,kyndryl
+LCI,0,1,1,lannett company inc.
+LTRN,0,1,1,lantern pharma
+LVS,1,1,1,las vegas sands
+LEG,0,1,1,leggett  platt
+LDOS,0,1,1,leidos holdings inc.
+LC,1,1,0,lendingclub corporation
+LII,0,1,1,lennox international inc.
+LTH,0,1,1,life time inc.
+LEV,1,1,0,lion electric
+LIQT,0,1,1,liqtech international inc.
+LAD,0,1,0,lithia motors inc.
+LYV,0,1,0,live nation entertainment
+LMT,0,0,1,lockheed martin
+L,1,1,1,loews corporation
+LUB,1,1,0,lubys inc.
+LITE,1,1,0,lumentum
+LYB,1,0,1,lyondellbasell industries
+CY,1,1,0,magnachip semiconductor corporation
+MSBK,1,1,0,main street capital corporation
+MNSB,0,1,0,mainstreet bancshares inc.
+ROCC,1,0,1,marathon oil corporation
+MPX,0,1,1,marine products corporation
+VAC,0,1,1,marriott vacations worldwide corporation
+MAXN,0,1,0,maxeon solar technologies ltd.
+MDU,1,1,1,mdu resources group inc.
+GSHD,1,1,0,mercury insurance
+MTD,1,1,1,mettler__toledo international inc.
+AGNC,1,1,1,mgic investment corporation
+MGP,0,1,1,mgm growth properties llc
+MGM,0,1,0,mgm resorts international
+MHO,0,1,1,mi homes inc.
+MFGP,1,1,1,micro focus
+MIST,1,1,1,milestone pharmaceuticals inc.
+MRTX,1,0,1,mirati therapeutics inc.
+MDB,1,1,0,mongodb inc.
+MPLX,1,1,0,mplx lp
+MSA,1,1,1,msa safety
+MSM,1,0,0,msc industrial supply co.
+CSFL,0,1,1,mt bank corporation
+NGG,1,0,1,national grid
+NNI,0,1,1,nelnet inc.
+NEPT,0,1,0,neptune wellness solutions inc.
+NTOP,1,1,0,net2phone
+NVRO,0,1,1,nevro corp.
+NEE,0,1,1,nextera energy inc.
+NEP,0,1,0,nextera energy inc. nextera energy partners lp
+NLSN,0,0,1,nielsen
+NKLA,0,1,1,nikola corporation
+NSC,0,1,1,norfolk southern corporation
+NWPX,0,1,0,northwest pipe company
+NLOK,0,1,1,nortonlifelock inc.
+NVAX,1,1,1,novavax inc.
+NUE,0,1,0,nucor corporation
+NVR,1,0,1,nvr inc.
+OAS,0,1,1,oasis petroleum inc.
+OGE,0,1,1,oge energy corp.
+ORI,0,1,0,old republic international corporation
+OGS,1,1,0,one gas inc.
+OPY,0,1,1,oppenheimer  co. inc.
+ORCL,1,1,0,oracle
+PYPL,0,1,1,paypal holdings inc.
+PBFX,0,1,1,pbf logistics lp
+BTU,0,1,0,peabody
+PBA,1,1,0,pembina pipeline corporation
+PAG,1,1,0,penske automotive group inc.
+PRGO,1,0,1,perrigo company plc
+PNC,0,0,1,pnc financial services group inc.
+PNM,1,0,1,pnm resources inc.
+PPL,0,1,1,ppl corporation
+PLD,1,1,0,prologis inc.
+PRSP,0,1,0,prosperity bancshares inc.
+PRU,1,1,0,prudential financial inc.
+QLYS,1,1,1,qualys inc.
+QD,1,1,0,qudian inc.
+DGX,0,1,0,quest diagnostics
+QUIK,1,1,0,quicklogic corporation
+RNWK,1,0,1,realnetworks inc.
+RLGY,1,1,0,realogy holdings corp.
+O,1,1,0,realty income corporation
+RCON,1,1,0,recon technology ltd.
+ABVC,1,0,1,redhill biopharma ltd.
+RWT,1,1,0,redwood trust inc.
+REGN,0,1,1,regeneron pharmaceuticals inc.
+MARK,0,1,0,remark holdings inc.
+RSG,1,0,1,republic services inc.
+REZI,1,0,1,resideo technologies inc.
+RFP,0,1,1,resolute forest products inc.
+RBA,0,1,1,ritchie bros. auctioneers
+RHI,0,1,1,robert half
+RCL,1,1,0,royal caribbean group
+RES,0,1,0,rpc inc.
+RSI,1,1,0,rush street interactive
+RYI,1,1,1,ryerson holding corporation
+CRM,1,1,0,salesforce
+SBH,1,1,0,sally beauty holdings inc.
+VTEC,1,0,1,sap se
+BFS,0,1,0,saul centers inc.
+SEAS,1,1,0,seaworld entertainment inc.
+SQNS,1,1,0,sequans communications
+ATNI,1,1,0,service corporation international
+SSTK,1,1,0,shutterstock inc.
+SIG,1,1,0,signet jewelers ltd.
+SILC,1,0,1,silicom ltd.
+SM,0,1,1,sm energy company
+SONM,0,1,0,sonim technologies inc.
+LUV,0,1,1,southwest airlines co.
+OKSB,1,1,1,southwest gas corporation
+SWX,1,0,1,southwest gas holdings inc.
+GMC,1,1,1,sp global market intelligence
+SR,1,1,1,spire inc.
+SAVE,0,1,0,spirit airlines inc.
+FLOW,1,0,1,spx flow inc.
+SSRM,1,1,0,ssr mining inc.
+STAG,0,1,1,stag industrial inc.
+LAB,1,1,1,standard  poors
+SMP,0,1,1,standard motor products inc.
+SVAC,1,1,0,starboard value lp
+STWD,1,0,0,starwood property trust inc.
+SCL,1,0,1,stepan company
+SUN,1,1,1,sunoco lp
+SWCH,1,1,0,switch inc.
+SYF,0,1,0,synchrony
+SNDX,0,1,1,syndax pharmaceuticals inc.
+SNPS,1,1,0,synopsys inc.
+ABCL,1,1,0,synthetic biologics inc.
+WAFU,1,1,1,tal education group
+SKT,1,1,0,tanger factory outlet centers inc.
+TISI,1,0,1,team inc.
+TDS,1,1,1,telephone and data systems
+TEN,1,1,1,tenneco inc.
+TTI,0,1,1,tetra technologies inc.
+THG,0,1,1,the hanover insurance group inc.
+HD,1,1,1,the home depot
+HHC,1,1,0,the howard hughes corporation
+JYNT,1,0,1,the joint corp.
+SHW,1,1,1,the sherwin__williams company
+TMO,0,1,0,thermo fisher scientific
+TRI,1,1,1,thomson reuters
+TWI,0,0,1,titan international inc.
+TSQ,1,1,1,townsquare media inc.
+TREC,1,1,0,trecora resources
+THS,0,1,1,treehouse foods inc.
+TRMB,1,1,1,trimble
+TNET,0,1,1,trinet
+TGI,1,1,1,triumph group
+TROX,1,0,1,tronox holdings plc
+TFC,1,1,1,truist financial corporation
+ACCO,1,1,0,tupperware brands corporation
+TWTR,1,1,0,twitter inc.
+CHUY,1,0,1,u.s. silica holdings inc.
+UCTT,0,1,0,ultra clean holdings inc.
+UIS,0,1,1,unisys corporation
+UNVR,1,1,1,univar solutions inc.
+UHS,1,1,0,universal health services inc.
+VANS,0,1,1,vans
+VEC,1,1,0,vectrus inc.
+VEEV,1,1,1,veeva systems
+VNTR,0,1,0,venator materials plc
+VNE,0,1,1,veoneer
+VET,1,0,0,vermilion energy inc.
+VRS,1,0,1,verso corporation
+VTRS,0,1,0,viatris inc.
+AGMH,0,1,1,vipshop holdings limited
+VSTO,1,1,0,vista outdoor inc.
+VG,0,1,0,vonage
+VMC,0,1,0,vulcan materials company
+WASH,1,1,0,washington trust bancorp inc.
+WBS,1,0,1,webster financial corporation
+WST,1,0,1,west pharmaceutical services inc.
+UP,1,1,1,wheels up
+WOW,1,1,1,wideopenwest inc.
+LCID,1,1,0,wolf haldenstein adler freeman  herz llp
+WH,1,1,1,wyndham hotels  resorts
+XHR,1,1,1,xenia hotels  resorts inc.
+YEXT,1,1,1,yext inc.
+ZIM,1,1,1,zim integrated shipping services ltd.

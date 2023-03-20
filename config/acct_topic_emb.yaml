@@ -1,0 +1,25 @@
+model:
+  name: "topic_embedding_model"
+  load_embedding: False
+
+global:
+  n_topics: 100
+  min_word_cnt: 5
+  num_epoch: 100
+  display: True
+  model_path: "data_model/model/acct_topic_embedding_model_global_topics"
+  embedding_path: "data_model/model/acct_topic_embedding_model_global_topics_emb"
+
+local:
+  num_epoch: 1000
+  min_word_cnt: 1
+  min_num_doc_per_topic: 3
+  display: True
+  model_path: "data_model/model/acct_topic_embedding_model_local_topics"
+  embedding_path: "data_model/model/acct_topic_embedding_model_local_topics_emb"
+
+TRM:
+  uni_emb: "D:/tmp_model/acct_topic_trm_uni_emb"
+  uni_vocab: "D:/tmp_model/acct_topic_trm_uni_vocab"
+  emb_mask: "D:/tmp_model/acct_topic_trm_uni_emb_mask"
+  temp_data_path: "D:/tmp_model/acct_tmp_trm_data"

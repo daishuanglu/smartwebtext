@@ -1,0 +1,30 @@
+model_name: 'tte_sent_small_semisup'
+skip_prep_data: True
+# data path for dataloader creation and model training-validation-testing
+#saved_model_path:  "data_model/model/cf_model-epoch16-val_loss0.00.ckpt"
+raw_data_path: "data_model/ner_cleaned_title.csv"
+vocab_path: "data_model/tte_vocab.txt"
+preproc_data_path: "data_model/cached_tte_training_data.csv"
+
+train_data_path: "data_model/tte_training_data.csv"
+val_data_path: "data_model/tte_validation_data.csv"
+item_vocab_path: "data_model/tte_sent_small_item_vocab.json"
+eval_data_path: "data_model/tte_eval_data.csv"
+clear_cache: True
+resume_ckpt: False
+
+# CF model parameters
+skip_training: False
+semi_gt_path: "MTurk/MTurk_maj_vote.csv"
+monitor: "val_loss"
+score_col: "scores"
+query_col: "Text"
+ref_col: "Company"
+embed_size: 256
+max_query_length: 128
+logger_dir: "./lightning_logs"
+learning_rate: 0.0001
+batch_size: 256
+epochs: 50
+limit:
+MTurk_eval_csv: "MTurk/MTurk_eval_tics.csv"
