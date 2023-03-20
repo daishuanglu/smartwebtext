@@ -1,0 +1,30 @@
+# folders to ignore
+cover/
+env/
+venv/
+tmp/
+.idea/
+.vscode/
+.cache
+data/
+fasttext/
+__pycache__/
+*.ipynb_checkpoints/
+# filetype to ignore
+*.pyc
+*.egg-info/
+.DS_store
+.DS_Store
+*.swp
+**/ig_*
+.coverage
+
+build/
+dist/
+*/build/
+*/dist/
+*.pytest_cache
+# specific files to ignore
+sftp-config.json
+eval_results/
+sks_tests/

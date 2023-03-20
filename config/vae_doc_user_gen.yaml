@@ -26,7 +26,6 @@ max_doc_length: 512
 epochs: 50
 resume_ckpt: True
 monitor: 'val_perp'
-
 monte_carlo_steps: 1000
 test_batch_size: 1024
 analytics_examples:
