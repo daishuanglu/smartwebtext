@@ -5,7 +5,6 @@ IP="34.168.216.203"
 a="code"
 b="prnews"
 c="fasttext"
-d='predictions'
 e="setup"
 f="model"
 g="log"
@@ -58,9 +57,5 @@ then
     scp -r fasttext/*en*100*.zip shuangludai@$IP:/home/shuangludai/$fdir/fasttext
     scp -r fasttext/lid.176.bin shuangludai@$IP:/home/shuangludai/$fdir/fasttext
 fi
-if [ $1 == $d ]
-then
-    echo "download predictions ..."
-    mkdir -p evaluation
-    scp -r shuangludai@$IP:/home/shuangludai/$fdir/evaluation/* evaluation
-fi
+
+

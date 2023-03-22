@@ -113,7 +113,7 @@ class ConditionalDocGenerator(ptl.LightningModule, ABC):
         with open(config['user_vocab_path'], 'r') as f:
             self.user_vocab = json.load(f)
             self.user_names = sorted([(id, w) for w, id in self.user_vocab.items()])
-        self.vae = ProdLDA(config, self.vocab_size, len(self.user_vocab))
+        self.vae = ProdLDA(config, self.vocab_size, len(self.user_vocab)).to(device)
 
     def doc_tok_ids_count(self, batch):
         tok = self.tokenizer(
@@ -125,15 +125,15 @@ class ConditionalDocGenerator(ptl.LightningModule, ABC):
         attn_mask = torch.unsqueeze(tok['attention_mask'].to(device), dim=-1)
         attn_mask = attn_mask.expand(tok_ids_one_hot.size()).clone()
         masked_tok_count = torch.sum(tok_ids_one_hot * attn_mask, dim=1).float()
-        return masked_tok_count
+        return masked_tok_count.to(device)
 
     def generate_user(self, list_of_doc_strs):
-        self.eval()
         batch = {self.config['text_col']: list_of_doc_strs}
         recon_doc, recon_user, probs = self(batch, False, False)
         return recon_user.cpu().detach().numpy()
 
     def monte_carlo_user(self, sentences, steps=1000, batch_size=1024):
+        self.eval()
         user_probs = np.zeros((len(sentences), len(self.user_vocab)))
         for _ in tqdm(range(steps)):
             for i in range(0, len(sentences), batch_size):

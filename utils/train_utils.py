@@ -12,27 +12,21 @@ MODEL_OBJ_PATH = '{logger_dir}/{model_name}.pt'
 DEFAULT_LOGGER_DIR = 'default_lightning_log'
 accelerator, device = ("gpu", "cuda:0") if torch.cuda.is_available() else ("cpu", "cpu")
 print("Use deep learning device: %s, %s." % (accelerator,device))
-
-
 def read_config(config_file):
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
     return config
-
-
-def load(model_obj_path, state_dict_path):
-    model = torch.load(model_obj_path, pickle_module=dill, encoding='utf-8')
+def load(model, state_dict_path):
+    #model = torch.load(model_obj_path, pickle_module=dill, encoding='utf-8')
     state_dict = torch.load(state_dict_path, map_location=torch.device(device))
     if 'pytorch-lightning_version' in state_dict.keys():
         state_dict = state_dict['state_dict']
     model.load_state_dict(state_dict)
     return model
 
-
 def save(model, PATH):
     torch.save(model.state_dict(), PATH)
     return
-
 
 def save_best(cur, prev, config, model):
     def _monitor_criterion(cur, prev):

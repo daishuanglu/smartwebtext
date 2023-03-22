@@ -5,8 +5,7 @@ import pandas as pd
 from preprocessors import pipelines
 from utils import train_utils
 from utils import data_utils
-from models import video_text
-
+from models import vae_doc_generator
 
 def main():
     config = train_utils.read_config("config/vae_doc_user_gen.yaml")
@@ -17,7 +16,7 @@ def main():
 
     config['logger_dir'] = config.get('logger_dir', train_utils.DEFAULT_LOGGER_DIR)
     model_obj = vae_doc_generator.ConditionalDocGenerator(config)
-    print("model initialized. " )
+    print("model initialized. ")
     if not config.get('skip_training', False):
         print("create training -validation dataloader")
         train_dl = data_utils.get_context_csv_data_loader(
@@ -58,10 +57,10 @@ def main():
     print("generate evaluation results. ")
     model_obj_path = train_utils.MODEL_OBJ_PATH.format(
         logger_dir=config['logger_dir'], model_name=config['model_name'])
-    model = train_utils.load(model_obj_path, latest_file)
+    model = train_utils.load(model_obj, latest_file)
     concepts = [
         key.split('_examples')[0] for key in config.keys() if key.endswith('_examples')]
-    predictions = pd.DataFrame([], index=[n[1] for n in model.user_names])
+    predictions = pd.DataFrame([n[1] for n in model.user_names], columns=['company'])
     for c in concepts:
         eval_example_load_kwargs = {
             **config['{:s}_examples'.format(c)],

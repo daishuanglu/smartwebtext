@@ -9,7 +9,7 @@ text_col: "Text"
 ref_col: "Company"
 limit:
 
-skip_training: False
+skip_training: True
 clear_cache: True
 bert_model_name: 'distilbert-base-uncased'
 min_word_cnt: 30
@@ -27,7 +27,7 @@ epochs: 50
 resume_ckpt: True
 monitor: 'val_perp'
 monte_carlo_steps: 1000
-test_batch_size: 1024
+test_batch_size: 32
 analytics_examples:
   fpath: 'professional/analytics_examples.csv'
   text_col: 'related_paragraphs'
