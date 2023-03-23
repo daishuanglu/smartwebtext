@@ -1,3 +1,5 @@
+import math
+
 from utils import string_utils
 from preprocessors import dataloader
 
@@ -69,7 +71,7 @@ def kth_action_video():
     return
 
 def eval_example_sentences(
-        fpath, text_col, row_delimiter, multi_sent_seps, preproc_sep, preproc_fn=None):
+        fpath, text_cols, row_delimiter, multi_sent_seps, preproc_sep, preproc_fn=None):
 
     def _text_col(s):
         s = [w.strip() for w in string_utils.split_by_multi_sep(s, multi_sent_seps)]
@@ -79,6 +81,10 @@ def eval_example_sentences(
         else:
             return preproc_fn(preproc_sep.join(s))
 
-    textfile = dataloader.PandasTextFile(fpath=fpath, sep=row_delimiter, types={text_col: _text_col})
-    texts = textfile.all()[text_col]
-    return texts.dropna().tolist()
+    textfile = dataloader.PandasTextFile(
+        fpath=fpath, sep=row_delimiter, types={col: _text_col for col in text_cols})
+    texts = textfile.all()[text_cols].dropna().astype(str).apply(preproc_sep.join, axis=1)
+    texts = texts.str.split(preproc_sep).explode()
+    texts.replace('', math.nan, inplace=True)
+    texts = texts.dropna().tolist()
+    return texts

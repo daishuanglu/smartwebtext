@@ -12,10 +12,12 @@ MODEL_OBJ_PATH = '{logger_dir}/{model_name}.pt'
 DEFAULT_LOGGER_DIR = 'default_lightning_log'
 accelerator, device = ("gpu", "cuda:0") if torch.cuda.is_available() else ("cpu", "cpu")
 print("Use deep learning device: %s, %s." % (accelerator,device))
+
 def read_config(config_file):
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
     return config
+
 def load(model, state_dict_path):
     #model = torch.load(model_obj_path, pickle_module=dill, encoding='utf-8')
     state_dict = torch.load(state_dict_path, map_location=torch.device(device))

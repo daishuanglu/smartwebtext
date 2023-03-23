@@ -30,7 +30,7 @@ monte_carlo_steps: 1000
 test_batch_size: 32
 analytics_examples:
   fpath: 'professional/analytics_examples.csv'
-  text_col: 'related_paragraphs'
+  text_cols: ['related_paragraphs', 'title']
   row_delimiter: ','
   multi_sent_seps: ['...', '\n']
   preproc_sep: ';;;;'

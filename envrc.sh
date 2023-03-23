@@ -1,13 +1,13 @@
 #!/bin/bash
-set -ex
+set -eux
 if [ -e data_model/_tmp_data.gz ]
 then
-  cd data_model
-  tar -xzvf _tmp_data.gz
-  rm _tmp_data.gz
-  cd ..
+    cd data_model
+    tar -xzvf _tmp_data.gz
+    rm _tmp_data.gz
+    cd ..
 else
-  echo "No data zip file found"
+    echo "No data zip file found"
 fi
 pip install virtualenv
 virtualenv venv

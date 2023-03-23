@@ -67,6 +67,7 @@ def main():
             **{'preproc_fn': pipelines.prnews_text_preproc}}
         example_sent = pipelines.eval_example_sentences(**eval_example_load_kwargs)
         print('monte carlo search test concept:', c)
+        print('Loaded %d eval example sentences.' % len(example_sent))
         user_probs = model.monte_carlo_user(
             example_sent,
             steps=config['monte_carlo_steps'],
