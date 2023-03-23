@@ -17,10 +17,11 @@ KTH_ACTIONS = ['boxing', 'handclapping', 'handwaving', 'jogging', 'running', 'wa
 def get_synthetic_bboxes(vid_file_path, fids, labels=['person']):
     v = pims.Video(vid_file_path)
     df_data = pd.DataFrame([], columns=['fid', 'x', 'y', 'w', 'h', 'confidence'], index=fids)
-    for fid in fids:
+    for fid in tqdm(fids, desc='frame', position=1,  leave=False):
         _fid = int(fid)
         #print(fid, len(v))
-        _fid = len(v) - 1 if _fid >= len(v) else _fid
+        if _fid >= len(v):
+            break
         img = Image.fromarray(v[_fid])
         #results = ZS_OBJ_DETECTOR(img, candidate_labels=labels)
         results = OBJ_DETECTOR(img)
@@ -46,7 +47,7 @@ def parse_kth_splits():
     splits = {}
     dfs = []
     with open(fpath, 'r') as f:
-        for line in tqdm(f.readlines(), desc='KTH bbox synthetic data'):
+        for line in tqdm(f.readlines(), desc='KTH bbox synthetic data', position=0,  leave=False):
             if 'training:' in line.lower():
                 splits.update({pid: 'train' for pid in line.strip().split('person')[1].strip().split(', ')})
             if 'validation:' in line.lower():
@@ -56,8 +57,12 @@ def parse_kth_splits():
             if 'frames' in line.lower():
                 vid_file, kfs = line.strip().split('frames')
                 vid_file = vid_file.strip()
-                fids = sum([frange.split('-') for frange in kfs.strip().split(', ')], [])
-                fids = [int(id)-1 for id in fids]
+                #fids = sum([frange.split('-') for frange in kfs.strip().split(', ')], [])
+                #fids = [int(id) - 1 for id in fids]
+                fid_ranges = [frange.split('-') for frange in kfs.strip().split(', ')]
+                fids = []
+                for start, end in fid_ranges:
+                    fids += list(range(int(start), int(end)))
                 pid, action, var = vid_file.split('_')
                 pid = pid.split('person')[1]
                 for var in ['d1', 'd2', 'd3', 'd4']:
