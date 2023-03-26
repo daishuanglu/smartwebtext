@@ -20,7 +20,7 @@ from sentence_transformers import util as sbert_util
 from tqdm import tqdm
 from sklearn.metrics.pairwise import euclidean_distances, cosine_distances
 from itertools import product
-from train_utils import  read_config, device
+from utils.train_utils import read_config, device
 
 #bert_model_name = 'google/mobilebert-uncased'
 bert_model_name = 'distilbert-base-uncased'

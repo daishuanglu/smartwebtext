@@ -1,0 +1,18 @@
+model_name: 'kth_action_seq'
+skip_prep_data: False
+dataset_dir: 'C:/Users/shud0/KTHactions'
+train_data_path: 'data_model/kth_actions_train.csv'
+val_data_path: 'data_model/kth_actions_val.csv'
+
+skip_training: False
+batch_size: 2
+clip_len: 16
+max_output_seq_len: 128
+clear_cache: True
+limit:
+epochs: 10
+resume_ckpt: True
+learning_rate: 0.0001
+
+monitor: val_loss
+logger_dir: './lightning_logs'

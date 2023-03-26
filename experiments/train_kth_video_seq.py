@@ -7,36 +7,33 @@ from models import video_text
 
 
 def main():
-    # TODO: Hanyi see if you can train a detr video model as follows
-    config = train_utils.read_config("config/detr_kth_action_vid.yaml")
+    config = train_utils.read_config("config/kth_action_seq.yaml")
     if not config.get("skip_prep_data", False):
-        pipelines.kth_action_video()
+        pipelines.kth_action_video_nobbox(config['dataset_dir'])
 
     config['logger_dir'] = config.get('logger_dir', train_utils.DEFAULT_LOGGER_DIR)
-    model_obj = video_text.Detr(config)
+    model_obj = video_text.STEncoderDecoder(config)
     print("model initialized. ")
     if not config.get('skip_training', False):
         print("create training -validation dataloader")
         train_dl = data_utils.get_context_csv_data_loader(
             config['train_data_path'],
-            video_text.train_kth_features,
+            video_text.train_kth_nobbox_features,
             batch_size=config['batch_size'],
             clear_cache=config['clear_cache'],
             shuffle=True,
             sep=pipelines.KTH_ACTION_DATA_CSV_SEP,
             max_line=10 ** 7,
-            limit=config.get('limit', None),
-            col_fns=video_text.kth_detr_col_fns
+            limit=config.get('limit', None)
         )
         val_dl = data_utils.get_context_csv_data_loader(
-            config['val_data_path'], video_text.train_kth_features,
+            config['val_data_path'], video_text.train_kth_nobbox_features,
             batch_size=config['batch_size'],
             clear_cache=config['clear_cache'],
             shuffle=False,
             sep=pipelines.KTH_ACTION_DATA_CSV_SEP,
             max_line=10 ** 7,
-            limit=config.get('limit', None),
-            col_fns=video_text.kth_detr_col_fns
+            limit=config.get('limit', None)
         )
         logger_dir = config.get("logger_dir", "./lightning_logs")
         os.makedirs(logger_dir, exist_ok=True)
@@ -50,3 +47,6 @@ def main():
             model_name=config['model_name'],
             monitor=config['monitor'],
             logger_path=config['logger_dir'])
+
+if __name__ == '__main__':
+    main()

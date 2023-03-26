@@ -115,7 +115,6 @@ def parse_kth_splits(kth_action_home, limit=10**10):
                         df_bbox['vid'] = generate_uuid_from_string(vid_file_path)
                         dfs.append(df_bbox)
                         n += 1
-
     df_data = pd.concat(dfs)
     return df_data
 

@@ -1,4 +1,5 @@
 import math
+import os
 import pandas as pd
 
 from utils import string_utils
@@ -21,6 +22,9 @@ KTH_ACTION_DATA_CSV_SEP = ','
 KTH_SPLIT_COL = 'split'
 KTH_SPLIT_CSV = 'data_model/kth_actions_{split}.csv'
 KTH_FRAME_FEATURE_SEP = ';'
+#KTH_ACTION_HOME = '/home/shuangludai/KTHactions'
+KTH_VIDEO_FILE = '{action}/person{pid}_{action}_{var}_uncomp.avi'
+
 
 def prnews_text_preproc(s):
     stopwords = string_utils.load_stopwords()
@@ -65,6 +69,44 @@ def prnews(output_files, split_ratio, vocab_path):
     return
 
 
+def kth_action_video_nobbox(kth_action_home):
+    fpath = os.path.join(kth_action_home, '00sequences.txt')
+    splits = {}
+    df = dict(video=[], pid=[], action=[], split=[], fids=[])
+    with open(fpath, 'r') as f:
+        for line in f.readlines():
+            if 'training:' in line.lower():
+                splits.update({pid: 'train' for pid in line.strip().split('person')[1].strip().split(', ')})
+            if 'validation:' in line.lower():
+                splits.update({pid: 'val' for pid in line.strip().split('person')[1].strip().split(', ')})
+            if 'test:' in line.lower():
+                splits.update({pid: 'eval' for pid in line.strip().split('person')[1].strip().split(', ')})
+            if 'frames' in line.lower():
+                vid_file, kfs = line.strip().split('frames')
+                vid_file = vid_file.strip()
+                #fids = sum([frange.split('-') for frange in kfs.strip().split(', ')], [])
+                #fids = [int(id) - 1 for id in fids]
+                fid_ranges = [frange.split('-') for frange in kfs.strip().split(', ')]
+                fids = []
+                for start, end in fid_ranges:
+                    fids += list(range(int(start), int(end)))
+                df['fids'].append(';'.join(list(map(str, fids))))
+                pid, action, var = vid_file.split('_')
+                pid = pid.split('person')[1]
+                df['pid'].append(int(pid))
+                df['action'].append(action)
+                vid_file_basepath = KTH_VIDEO_FILE.format(action=action, pid=pid, var=var)
+                vid_file_path = os.path.join(kth_action_home, vid_file_basepath)
+                df['video'].append(vid_file_path)
+                df['split'].append(splits[pid])
+    df = pd.DataFrame(df)
+    for split in df['split'].unique():
+        df_split = df[df['split'] == split]
+        df_split.drop(columns=['split'])
+        df_split.to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
+    return
+
+
 def kth_action_video():
     textfile = dataloader.PandasTextFile(fpath=KTH_ACTION_SRC_CSV, sep=KTH_ACTION_DATA_CSV_SEP)
     df = textfile.all()
@@ -80,7 +122,6 @@ def kth_action_video():
         df_output.to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
         print('KTH action ', split, 'set: ', len(df), 'samples')
     return
-
 
 def eval_example_sentences(
         fpath, text_cols, row_delimiter, multi_sent_seps, preproc_sep, preproc_fn=None):

@@ -85,10 +85,10 @@ def training_pipeline(model, train_x, val_x, nepochs, resume_ckpt=False, model_n
         #print("monitor metric after: ", trainer.callback_metrics[monitor].item())
     else:
         trainer.fit(model, train_x, val_x)
-    torch.save(
-        model,
-        MODEL_OBJ_PATH.format(logger_dir=logger_path, model_name=model_name),
-        pickle_module=dill)
+    #torch.save(
+    #    model,
+    #    MODEL_OBJ_PATH.format(logger_dir=logger_path, model_name=model_name),
+    #    pickle_module=dill)
     if val_x is None:
         return model, None
     elif train_x is None:

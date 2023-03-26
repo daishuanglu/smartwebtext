@@ -1,118 +1,91 @@
 import torch
 import pytorch_lightning as ptl
 from abc import ABC
-from transformers import DetrForObjectDetection, DetrImageProcessor
 import pims
-
+import numpy as np
+from typing import Dict
 from preprocessors import pipelines
+from transformers import VisionEncoderDecoderModel, BertTokenizer
+from transformers import AutoImageProcessor
 
 
-detr_img_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
+def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+    converted_len = int(clip_len * frame_sample_rate)
+    end_idx = np.random.randint(converted_len, seg_len)
+    start_idx = end_idx - converted_len
+    indices = np.linspace(start_idx, end_idx, num=clip_len)
+    indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+    return indices
 
-DETR_LABEL_EXAMPLE_DICT = {
-    'size': torch.tensor([800, 1066]),
-    'image_id':  torch.tensor([13]),
-    'class_labels':  torch.tensor([0, 0]),
-    'boxes':  torch.tensor([[0.5603, 0.3812, 0.0649, 0.1152],
-         [0.4990, 0.3880, 0.0742, 0.1146]]),
-    'area':  torch.tensor([923.7658, 552.3618]),
-    'iscrowd':  torch.tensor([0, 0]),
-    'orig_size':  torch.tensor([1536, 2048])}
 
-train_kth_features = {
-    'video_path': (lambda x: str(x)),
-    'x': (lambda x: float(x)),
-    'y': (lambda x: float(x)),
-    'w': (lambda x: float(x)),
-    'h': (lambda x: float(x)),
-    'action': (lambda x: pipelines.KTH_ACTIONS.index(x))
+def load_video(vf):
+    v = pims.Video(vf)
+    indices = sample_frame_indices(clip_len=16, frame_sample_rate=1, seg_len=len(v))
+    video = np.stack([v[i] for i in indices])
+    return indices, video
+
+train_kth_nobbox_features = {
+    'video': (lambda x: load_video(str(x))),
+    'pid': (lambda x: int(x)),
+    'action': (lambda x: pipelines.KTH_ACTIONS.index(x)),
+    'fids': (lambda x: list(map(int, x.split(';'))))
 }
 
 
-def detr_inputs(feature):
-    v = pims.Video(feature['video_path'])
-    pixel_values = v[feature['fid']]
-    encoding = detr_img_processor.pad(pixel_values, return_tensors="pt")
-    encoded_pixel_values = encoding['pixel_values']
-    encoded_pixel_mask = encoding['pixel_mask']
-    return encoded_pixel_values, encoded_pixel_mask
-
-
-def detr_labels(feature):
-    label = DETR_LABEL_EXAMPLE_DICT.copy()
-    label['class_labels'] = torch.tensor([feature['action']])
-    label['orig_size'] = torch.tensor([feature['img_height'], feature['img_width']])
-    boxes = [[feature['x'], feature['y'], feature['w'], feature['h']]]
-    label['boxes'] = torch.tensor(boxes)
-    label['image_id'] = torch.tensor([0])
-    label['size'] = label['orig_size']
-    label['is_crowd'] = torch.tensor([0])
-    label['area'] = torch.tensor([w*h for _,_,w,h in boxes])
-    return label
-
-kth_detr_col_fns = {'inputs': detr_inputs, 'label': detr_labels}
-
-
-class Detr(ptl.LightningModule, ABC):
+class STEncoderDecoder(ptl.LightningModule, ABC):
     def __init__(self, config):
         super().__init__()
-        # replace COCO classification head with custom head
-        # we specify the "no_timm" variant here to not rely on the timm library
-        # for the convolutional backbone
-        self.model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
-                                                            revision="no_timm",
-                                                            num_labels=config['num_labels'],
-                                                            ignore_mismatched_sizes=True)
-        # see https://github.com/PyTorchLightning/pytorch-lightning/pull/1896
-        self.lr = config['lr']
-        self.lr_backbone = config['lr_backbone']
-        self.weight_decay = config['weight_decay']
+        self.config = config
+        self.vis_encdec = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            encoder_pretrained_model_name_or_path="MCG-NJU/videomae-base",
+            decoder_pretrained_model_name_or_path="bert-base-uncased")
+        self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        #self.vis_encdec.config.decoder_start_token_id = self.tokenizer.cls_token_id
+        #self.vis_encdec.config.pad_token_id = self.tokenizer.pad_token_id
+        self.image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
+        #self.vid_mae = VideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
 
-    def forward(self, pixel_values, pixel_mask):
-        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+    def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
+        batch_sampled_fids, batch_video = list(zip(*batch['video']))
+        inputs = self.image_processor(list(map(list, batch_video)), return_tensors="pt")
+        # The 1568 latent dimension can be seen as a tokenization of 16 frames, each with 98 tokens.
+        inputs['decoder_input_ids'] = torch.tensor([list(range(
+            self.config['max_output_seq_len'])) for _ in range(self.config['batch_size'])]).long()
+        if compute_loss:
+            # Use '{person} {action}' as a short caption of a frame.
+            batch_pid_aid = [[
+                '{person:d} {action:d}'.format(person=pid, action=aid) if fid in action_fids else 'none none'
+                for fid in sampled_fids] for action_fids, sampled_fids, pid, aid in zip(*[
+                batch['fids'], batch_sampled_fids, batch['pid'], batch['action']]) ]
+            # Use [SEP] to separate different frames.
+            batch_pid_aid_str =  ['[SEP]'.join(s) for s in batch_pid_aid]
+            inputs['labels'] = self.tokenizer(
+                batch_pid_aid_str,
+                padding="max_length",
+                truncation=True,
+                max_length=self.config['max_output_seq_len'],
+                return_tensors="pt").input_ids
+            outputs = self.vis_encdec(**inputs)
+        else:
+            generated_ids = self.vis_encdec.generate(**inputs)
+            outputs = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return outputs
 
-    def common_step(self, batch, batch_idx):
-        # code refering to
-        # https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master
-        # /DETR/Fine_tuning_DetrForObjectDetection_on_custom_dataset_(balloon).ipynb#scrollTo=jJjrd5vp2PWe
-        # pixel_values = batch["pixel_values"]
-        # pixel_mask = batch["pixel_mask"]
-        # unwrap pixel value and masks
-        pixel_values, pixel_mask = list(zip(*batch['inputs']))
-        labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["label"]]
-        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+    def train_or_val_step(self, batch, training):
+        outputs = self.forward(batch, compute_loss=True)
         loss = outputs.loss
-        loss_dict = outputs.loss_dict
-        return loss, loss_dict
-
-    def training_step(self, batch, batch_idx):
-        loss, loss_dict = self.common_step(batch, batch_idx)
-        # logs metrics for each training_step,
-        # and the average across the epoch
-        self.log("train_loss", loss)
-        for k, v in loss_dict.items():
-            self.log("train_" + k, v.item())
-
+        loss_type = 'train' if training else 'val'
+        log = {
+            f'{loss_type}_loss': loss.item()
+        }
+        self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
         return loss
 
-    def validation_step(self, batch, batch_idx):
-        loss, loss_dict = self.common_step(batch, batch_idx)
-        self.log("val_loss", loss)
-        for k, v in loss_dict.items():
-            self.log("val_" + k, v.item())
+    def training_step(self, batch, batch_nb):
+        return {'loss': self.train_or_val_step(batch, True)}
 
-        return loss
+    def validation_step(self, batch, batch_nb):
+        self.train_or_val_step(batch, False)
 
     def configure_optimizers(self):
-        param_dicts = [
-            {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
-            {
-                "params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
-                "lr": self.lr_backbone,
-            },
-        ]
-        optimizer = torch.optim.AdamW(param_dicts, lr=self.lr,
-                                      weight_decay=self.weight_decay)
-
-        return optimizer, []
+        return [torch.optim.AdamW(params=self.parameters(), lr=self.config['learning_rate'])], []
