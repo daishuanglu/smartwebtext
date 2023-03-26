@@ -24,4 +24,6 @@ pybackground
 pims
 av
 timm
+wget
+p_tqdm
 # How to use tensorboard: tensorboard --logdir=$EVENTS_FOLDER

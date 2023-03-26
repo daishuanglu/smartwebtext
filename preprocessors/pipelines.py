@@ -62,11 +62,14 @@ def prnews(output_files, split_ratio, vocab_path):
     textfile.vocab(['Company'], vocab_path)
     return
 
+
 def kth_action_video():
     textfile = dataloader.PandasTextFile(fpath=KTH_ACTION_SRC_CSV, sep=KTH_ACTION_DATA_CSV_SEP)
     df = textfile.all()
     for split in df[KTH_SPLIT_COL].unique():
-        df[df[KTH_SPLIT_COL] == split].to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
+        df_split = df[df[KTH_SPLIT_COL] == split]
+        for uuid in df_split['vid'].unique():
+            df_split[df_split['vid'] == uuid].to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
         print('KTH action ', split, 'set: ', len(df), 'samples')
     return
 

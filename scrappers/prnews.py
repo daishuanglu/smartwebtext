@@ -1,8 +1,8 @@
 """
 Web press news scrapper for prnewswire website (https://www.prnewswire.com). Example usage
 python3 scrappers/prnews.py\
-    --output_dir=path/to/output/folder
-    --company_url_path=path/to/company/list/file.txt
+    --output_dir=path/to/output/folder\
+    --company_url_path=path/to/company/list/file.txt\
     --kw_search_counts='{"NASDAQ":15440, "NYSE":14811}'
 
 Runing this command will scrap all the companies from NASDAQ and NYSE company news url to

@@ -6,6 +6,8 @@ from scipy import sparse
 import numpy as np
 from torch.utils.data import DataLoader
 from typing import Dict, Callable
+
+
 def randsample_df_by_group_rate(df, group_cols, rate):
     sample_info = (df.groupby(group_cols).size()*rate).round(0).astype(int)
     mapper = sample_info.to_dict()
@@ -26,6 +28,7 @@ def randsample_df_by_group_size(df, group_cols, size=10):
         ).reset_index(drop = True)
     df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
     return df
+
 
 class CSVDataset(torch.utils.data.Dataset):
     def __init__(self, path, features_desc, nb_samples, sep=',',
