@@ -73,6 +73,8 @@ def kth_action_video():
         df_output = pd.DataFrame([], index=df_split['vid'].unique())
         for uuid in df_split['vid'].unique():
             df_split_uuid = df_split[df_split['vid'] == uuid]
+            df_split_uuid = df_split_uuid.sort_values(
+                ['fid', 'x', 'y'], ascending=[True, True, True])
             for col in df_split.columns:
                 df_output.at[uuid, col] = df_split_uuid[col].str.cat(sep=KTH_FRAME_FEATURE_SEP)
         df_output.to_csv(KTH_SPLIT_CSV.format(split=split), index=False)

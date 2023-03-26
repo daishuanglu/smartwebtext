@@ -49,7 +49,7 @@ def generate_uuid_from_string(the_string):
 def get_synthetic_bboxes(vid_file_path, fids, labels=['person']):
     v = pims.Video(vid_file_path)
     df_data = pd.DataFrame([], columns=['fid', 'x', 'y', 'w', 'h', 'confidence'], index=fids)
-    for fid in tqdm(fids, desc='frame', position=1,  leave=False):
+    for fid in tqdm(fids, desc='frame'):
         _fid = int(fid)
         #print(fid, len(v))
         if _fid >= len(v):
