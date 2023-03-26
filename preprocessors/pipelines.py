@@ -1,4 +1,5 @@
 import math
+import pandas as pd
 
 from utils import string_utils
 from preprocessors import dataloader
@@ -19,6 +20,7 @@ KTH_ACTIONS = ['boxing', 'handclapping', 'handwaving', 'jogging', 'running', 'wa
 KTH_ACTION_DATA_CSV_SEP = ','
 KTH_SPLIT_COL = 'split'
 KTH_SPLIT_CSV = 'data_model/kth_actions_{split}.csv'
+KTH_FRAME_FEATURE_SEP = ';'
 
 def prnews_text_preproc(s):
     stopwords = string_utils.load_stopwords()
@@ -68,10 +70,15 @@ def kth_action_video():
     df = textfile.all()
     for split in df[KTH_SPLIT_COL].unique():
         df_split = df[df[KTH_SPLIT_COL] == split]
+        df_output = pd.DataFrame([], index=df_split['vid'].unique())
         for uuid in df_split['vid'].unique():
-            df_split[df_split['vid'] == uuid].to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
+            df_split_uuid = df_split[df_split['vid'] == uuid]
+            for col in df_split.columns:
+                df_output.at[uuid, col] = df_split_uuid[col].str.cat(sep=KTH_FRAME_FEATURE_SEP)
+        df_output.to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
         print('KTH action ', split, 'set: ', len(df), 'samples')
     return
+
 
 def eval_example_sentences(
         fpath, text_cols, row_delimiter, multi_sent_seps, preproc_sep, preproc_fn=None):
