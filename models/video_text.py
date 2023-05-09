@@ -24,6 +24,7 @@ def load_video(vf):
     video = np.stack([v[i] for i in indices])
     return indices, video
 
+
 train_kth_nobbox_features = {
     'video': (lambda x: load_video(str(x))),
     'pid': (lambda x: int(x)),

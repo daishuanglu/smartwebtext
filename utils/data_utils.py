@@ -79,7 +79,7 @@ class CSVDataset(torch.utils.data.Dataset):
             print(e)
             print(line)
             print(index,  irow, self.file)
-            assert False, 'error captured.'
+            assert False, e.__repr__()
         return feature
 
     def __len__(self):
