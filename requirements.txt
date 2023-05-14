@@ -21,9 +21,13 @@ numba
 sentence-transformers
 tensorboard
 pybackground
+rarfile
+#sudo apt-get install unrar
+gdown
 pims
 av
 timm
 wget
 p_tqdm
+h5py
 # How to use tensorboard: tensorboard --logdir=$EVENTS_FOLDER

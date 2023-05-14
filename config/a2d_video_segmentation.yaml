@@ -1,0 +1,22 @@
+model_name: 'a2d_video_image_segmentor'
+train_val_ratio: [0.95, 0.05]
+skip_prep_data: False
+dataset_dir: 'D:/video_datasets/A2D'
+label_colors_json: 'D:/video_datasets/A2D/label_colors.json'
+#Model
+skip_training: False
+input_size: [320, 768]
+in_channels: 3
+out_channels: 64
+features: [64, 128, 256, 512]
+bilinear: True
+
+#Settings
+learning_rate: 0.0001
+monitor: 'val_loss'
+epochs: 50
+batch_size: 2
+clear_cache: False
+limit:
+logger_dir: 'lightning_logs'
+resume_ckpt: True

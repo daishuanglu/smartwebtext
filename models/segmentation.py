@@ -1,44 +1,16 @@
-from PIL import Image as PIlImage
+from abc import ABC
+import pytorch_lightning as ptl
+import itertools
+from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pytorch_lightning as ptl
-from abc import ABC
-import numpy as np
-import math
-import scipy.io as sio
-from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder, TransformerDecoderLayer
 import torchvision.transforms as transforms
 
-TRAINING_SIZE = (256, 256)
 
-transform = transforms.Compose([
-    transforms.Resize(TRAINING_SIZE), # Resize to a fixed size
-    transforms.ToTensor() # Convert PIL Image to PyTorch Tensor
-])
-#resize_transform = nn.Upsample(size=TRAINING_SIZE, mode='bilinear')
-resize_transform = transforms.Resize(TRAINING_SIZE)
+from utils.train_utils import device
+from utils import color_utils
 
-def load_bsds_image(img_path):
-    img = PIlImage.open(img_path)
-    img = transform(img)
-    return img
-
-
-def load_bsds_label(raw_label_file, region_or_edge=0):
-    # region_or_edge: 0 means region map,  1 indicates edge_map
-    # BSDS uses 5 human to segment each image.
-    # Each human generated their own segmentation for a same image.
-    mat = sio.loadmat(raw_label_file)
-    human_subject = np.random.choice(5, 1, replace=True)[0]
-    label_map = mat['groundTruth'][0, human_subject][0, 0][region_or_edge].astype('int64')
-    label_map = resize_transform(torch.from_numpy(label_map).unsqueeze(0))
-    return label_map.squeeze()
-
-train_bsds_features = {
-    'image': (lambda x: load_bsds_image(str(x))),
-    'gt': (lambda x: load_bsds_label(str(x)))
-}
 
 class BCEWithLogitsLoss(nn.Module):
     def __init__(self):
@@ -68,6 +40,7 @@ class DoubleConv(nn.Module):
         x = self.conv(x)
         return x
 
+
 class Up(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Up, self).__init__()
@@ -90,30 +63,86 @@ class Up(nn.Module):
         x = self.conv(x)
         return x
 
-class UNet(ptl.LightningModule, ABC):
-    def __init__(self, config):
-        super(UNet, self).__init__()
-        self.config = config
+
+class SegmentationEngine(ptl.LightningModule, ABC):
+    def __init__(self, batch_size, learning_rate):
+        super(SegmentationEngine, self).__init__()
         self.criterion = BCEWithLogitsLoss()
-        self.in_channels = config['in_channels']
-        self.features = config['features']
+        self.bsize = batch_size
+        self.lr = learning_rate
+
+    def build_network(self):
+        assert NotImplementedError(), 'Need to implement the network architecture.'
+
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        assert NotImplementedError(), 'Need to implement the network forward.'
+
+    def train_or_val_step(self, batch, training):
+        outputs, loss = self.forward(batch, compute_loss=True)
+        loss_type = 'train' if training else 'val'
+        log = {
+            f'{loss_type}_loss': loss.item()
+        }
+        self.log_dict(log, batch_size=self.bsize, on_step=True, prog_bar=True)
+        return loss
+
+    def training_step(self, batch, batch_nb):
+        return {'loss': self.train_or_val_step(batch, True)}
+
+    def validation_step(self, batch, batch_nb):
+        self.train_or_val_step(batch, False)
+
+    def configure_optimizers(self):
+        return [torch.optim.AdamW(params=self.parameters(), lr=self.lr)], []
+
+
+class UNet(SegmentationEngine):
+    def __init__(self, config):
+        super(UNet, self).__init__(config['batch_size'], config['learning_rate'])
+        self.config = config
+        self.build_network()
+        if not config.get('label_colors_json', None):
+            label_colors = color_utils.generate_colors(self.config['out_channels'])
+            self.label_colors = torch.tensor(label_colors)
+        else:
+            label_colors = color_utils.load_color_codes(config['label_colors_json'])
+            self.label_colors = torch.tensor([d['color'] for d in label_colors])
+
+    def build_network(self):
+        self.centercrop_transform = transforms.CenterCrop(self.config['input_size'])
+        self.in_channels = self.config['in_channels']
+        self.features = self.config['features']
         # Define the encoder part of the model
         self.encoder = nn.ModuleList()
-        in_features = [self.config['in_channels']]+ self.config['features']
-        for i in range(len(in_features)-1):
-            self.encoder.append(DoubleConv(in_features[i], in_features[i+1]))
+        in_features = [self.config['in_channels']] + self.config['features']
+        for i in range(len(in_features) - 1):
+            self.encoder.append(DoubleConv(in_features[i], in_features[i + 1]))
         self.decoder = nn.ModuleList()
         out_features = [self.config['out_channels']] + self.config['features']
         for i in range(1, len(out_features)):
-            self.decoder.append(Up(out_features[-i], out_features[-i-1]))
+            self.decoder.append(Up(out_features[-i], out_features[-i - 1]))
         # Define the output layer
         self.output = nn.Conv2d(
             self.config['out_channels'], self.config['out_channels'], kernel_size=1)
 
+    def pad_or_crop(self, list_of_tensor2d):
+        padded = []
+        for tensor in list_of_tensor2d:
+            height_pad = max(self.config['input_size'][0] - tensor.shape[0], 0)
+            width_pad = max(self.config['input_size'][1] - tensor.shape[1], 0)
+            top_pad = height_pad // 2
+            bottom_pad = height_pad - top_pad
+            left_pad = width_pad // 2
+            right_pad = width_pad - left_pad
+            padded_tensor = F.pad(
+                tensor, (left_pad, right_pad, top_pad, bottom_pad), mode='constant', value=-1)
+            padded_tensor = self.centercrop_transform(padded_tensor)
+            padded.append(padded_tensor)
+        return padded
 
     def forward(self, batch, compute_loss=False):
-        # Encoder
-        x = torch.stack(batch['image'], dim=0)
+        x = list(itertools.chain(*batch['image']))
+        x = torch.stack(x, dim=0).to(device)
         encoder_features = []
         for module in self.encoder:
             x = module(x)
@@ -127,25 +156,59 @@ class UNet(ptl.LightningModule, ABC):
         if not compute_loss:
             return x, None
         else:
-            target = torch.stack(batch['gt'], dim=0)
-            target_one_hot = F.one_hot(target, num_classes=self.config['out_channels'])
-            loss = self.criterion(x, target_one_hot.float())
+            gt = list(itertools.chain(*batch['gt']))
+            target = torch.stack(self.pad_or_crop(gt), dim=0).to(device)
+            targets = target[target > -1]
+            targets = torch.minimum(torch.tensor(self.config['out_channels']-1), targets)
+            targets_one_hot = F.one_hot(targets, num_classes=self.config['out_channels'])
+            loss = self.criterion(x[target > -1, :], targets_one_hot.float())
             return x, loss
 
-    def train_or_val_step(self, batch, training):
-        outputs, loss = self.forward(batch, compute_loss=True)
-        loss_type = 'train' if training else 'val'
-        log = {
-            f'{loss_type}_loss': loss.item()
-        }
-        self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
-        return loss
+    def segments(self, list_of_images):
+        self.eval()
+        x, _ = self({'image': list_of_images})
+        x = x.argmax(axis=-1)
+        # Use gather to assign colors to each pixel location
+        color_labels = self.label_colors[x]
+        color_labels = color_labels.detach().cpu().numpy()
+        segments = [color_label.astype('uint8') for color_label in color_labels]
+        return segments
 
-    def training_step(self, batch, batch_nb):
-        return {'loss': self.train_or_val_step(batch, True)}
 
-    def validation_step(self, batch, batch_nb):
-        self.train_or_val_step(batch, False)
+class LFCN(SegmentationEngine):
+    def __init__(self, config):
+        super(LFCN, self).__init__(config['batch_size'], config['learning_rate'])
+        self.config = config
+        self.build_network()
+        self.criterion = nn.CrossEntropyLoss()
 
-    def configure_optimizers(self):
-        return [torch.optim.AdamW(params=self.parameters(), lr=self.config['learning_rate'])], []
+    def build_network(self):
+        TRAINING_SIZE = (512, 512)
+        h, w = TRAINING_SIZE[0], TRAINING_SIZE[1]
+        self.fc1 = nn.Linear(self.config['in_channels'] * h * w, 4096)
+        self.fc2 = nn.Linear(4096, 4096)
+        self.fc3 = nn.Linear(4096, self.config['num_classes'] * 32 * 32)
+        self.deconv1 = nn.ConvTranspose2d(
+            self.config['num_classes'], self.config['num_classes'], kernel_size=4, stride=2, padding=1)
+        self.deconv2 = nn.ConvTranspose2d(
+            self.config['num_classes'], self.config['num_classes'], kernel_size=4, stride=2, padding=1)
+        self.deconv3 = nn.ConvTranspose2d(
+            self.config['num_classes'], self.config['num_classes'], kernel_size=4, stride=2, padding=1)
+
+    def forward(self, batch, compute_loss):
+        x = torch.stack(batch['image'], dim=0).to(device)
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = x.view(-1, self.config['num_classes'], 32, 32)
+        x = F.relu(self.deconv1(x))
+        x = F.relu(self.deconv2(x))
+        x = F.relu(self.deconv3(x))
+        if not compute_loss:
+            return x, None
+        else:
+            target = torch.stack(batch['gt'], dim=0).to(device)
+            target = torch.minimum(torch.tensor(self.config['num_classes']-1), target)
+            loss = self.criterion(x, target.long())
+            return x, loss

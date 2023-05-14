@@ -3,7 +3,6 @@ import glob
 from pytorch_lightning import Trainer
 import torch
 import yaml
-import dill
 from GPUtil import showUtilization as gpu_usage
 from pytorch_lightning.callbacks import ModelCheckpoint
 

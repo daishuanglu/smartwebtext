@@ -55,8 +55,8 @@ def main():
     print('-----------------  done training ----------------------------')
     os.makedirs('evaluation', exist_ok=True)
     print("generate evaluation results. ")
-    model_obj_path = train_utils.MODEL_OBJ_PATH.format(
-        logger_dir=config['logger_dir'], model_name=config['model_name'])
+    #model_obj_path = train_utils.MODEL_OBJ_PATH.format(
+    #    logger_dir=config['logger_dir'], model_name=config['model_name'])
     model = train_utils.load(model_obj, latest_file)
     concepts = [
         key.split('_examples')[0] for key in config.keys() if key.endswith('_examples')]
