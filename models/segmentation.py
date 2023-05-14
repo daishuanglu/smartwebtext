@@ -65,11 +65,17 @@ class Up(nn.Module):
 
 
 class SegmentationEngine(ptl.LightningModule, ABC):
-    def __init__(self, batch_size, learning_rate):
+    def __init__(self, batch_size, learning_rate, label_colors_json=None):
         super(SegmentationEngine, self).__init__()
         self.criterion = BCEWithLogitsLoss()
         self.bsize = batch_size
         self.lr = learning_rate
+        if not label_colors_json:
+            label_colors = color_utils.generate_colors(self.config['out_channels'])
+            self.label_colors = torch.tensor(label_colors)
+        else:
+            label_colors = color_utils.load_color_codes(label_colors_json)
+            self.label_colors = torch.tensor([d['color'] for d in label_colors])
 
     def build_network(self):
         assert NotImplementedError(), 'Need to implement the network architecture.'
@@ -98,15 +104,10 @@ class SegmentationEngine(ptl.LightningModule, ABC):
 
 class UNet(SegmentationEngine):
     def __init__(self, config):
-        super(UNet, self).__init__(config['batch_size'], config['learning_rate'])
+        super(UNet, self).__init__(
+            config['batch_size'], config['learning_rate'], config.get('label_colors_json', None))
         self.config = config
         self.build_network()
-        if not config.get('label_colors_json', None):
-            label_colors = color_utils.generate_colors(self.config['out_channels'])
-            self.label_colors = torch.tensor(label_colors)
-        else:
-            label_colors = color_utils.load_color_codes(config['label_colors_json'])
-            self.label_colors = torch.tensor([d['color'] for d in label_colors])
 
     def build_network(self):
         self.centercrop_transform = transforms.CenterCrop(self.config['input_size'])
@@ -177,7 +178,8 @@ class UNet(SegmentationEngine):
 
 class LFCN(SegmentationEngine):
     def __init__(self, config):
-        super(LFCN, self).__init__(config['batch_size'], config['learning_rate'])
+        super(LFCN, self).__init__(
+            config['batch_size'], config['learning_rate'], config.get('label_colors_json', None))
         self.config = config
         self.build_network()
         self.criterion = nn.CrossEntropyLoss()
