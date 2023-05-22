@@ -3,11 +3,19 @@ train_val_ratio: [0.95, 0.05]
 skip_prep_data: False
 dataset_dir: 'D:/video_datasets/A2D'
 label_colors_json: 'D:/video_datasets/A2D/label_colors.json'
+val_prediction_fstr: 'val_predictions/{vid}/{fids}.jpg'
 #Model
 skip_training: False
 input_size: [320, 768]
+# pix2pix settings
+patch_size: [256, 256]
+gen_features: 64
+n_gen_enc: 6
+disc_features: [64,128, 256, 512]
 in_channels: 3
-out_channels: 64
+l1_lambda: 100
+# end of pix2pix settings
+out_channels: 64 #total 64 action-actor classes in A2D dataset
 features: [64, 128, 256, 512]
 bilinear: True
 

@@ -3,7 +3,6 @@ import json
 from collections import namedtuple
 from typing import List
 
-
 ColorCode = namedtuple('ColorCode', ['id', 'name', 'color'])
 
 
