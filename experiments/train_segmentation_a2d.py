@@ -1,5 +1,7 @@
 import os
 import glob
+
+import pandas as pd
 import torch
 
 import numpy as np
@@ -116,13 +118,15 @@ def main():
     os.makedirs(model_eval_dir, exist_ok=True)
     print("generate evaluation results. ")
     model = train_utils.load(model_obj, latest_file)
-    df_test_meta = pipelines.A2D_IMAGE_SPLIT_CSV.format(root=config['dataset_dir'], split='test')
+    test_meta_path = pipelines.A2D_IMAGE_SPLIT_CSV.format(root=config['dataset_dir'], split='test')
+    df_test_meta = pd.read_csv(
+        test_meta_path, dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
     for _, row in tqdm(df_test_meta.iterrows(), desc='A2D test video segmentation'):
-        os.makedirs(os.path.join(model_eval_dir, row['VID']), exist_ok=True)
-        vf = pipelines.A2D_CLIP_PATH.format(root=config['dataset_dir'], vid=row['VID'])
+        os.makedirs(os.path.join(model_eval_dir, row['vid']), exist_ok=True)
+        vf = pipelines.A2D_CLIP_PATH.format(root=config['dataset_dir'], vid=row['vid'])
         v = pims.Video(vf)
         for fid in row['fids'].split(pipelines.A2D_FID_SEP):
-            output_fname = os.path.join(model_eval_dir, row['VID']+'/'+fid+'.jpg')
+            output_fname = os.path.join(model_eval_dir, row['vid']+'/'+fid+'.jpg')
             segments = model.segments([v[int(fid)]])[0]
             output_image = PilImage.fromarray(segments, mode='RGB')
             output_image.save(output_fname)
