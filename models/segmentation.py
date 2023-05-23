@@ -116,12 +116,11 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             for patch_coords, save_path in zip(sum(batch['patch_coords'], []), predictions_paths):
                 patch_segments = []
                 for i in range(len(patch_coords)):
-                    patch_segments.append(generate_color_segments(outputs[n], self.label_colors))
+                    patch_segments.append(generate_color_segments(outputs[n].cpu(), self.label_colors))
                     n += 1
                 color_segments = image_utils.patches_to_image(patch_segments, patch_coords)
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 PilImage.fromarray(color_segments).save(save_path)
-            self.train()
         self.log_dict({'val_loss': loss.item()}, batch_size=self.bsize, on_step=True, prog_bar=True)
         return {'loss': loss.item()}
 
@@ -164,7 +163,7 @@ class Discriminator(nn.Module):
                 features[0], kernel_size=4, stride=2, padding=1, padding_mode="reflect"),
             nn.LeakyReLU(0.2)
         )
-        self.layers = []
+        self.layers = nn.ModuleList()
         in_channels = features[0]
         for feature in features[1:]:
             self.layers.append(
@@ -204,10 +203,10 @@ class Generator(nn.Module):
     def __init__(self, in_channels=3, features=64, n_layers=6, out_channels=None):
         super(Generator, self).__init__()
         out_channels = in_channels if out_channels is None else out_channels
-        self.inital = nn.Sequential(
+        self.initial = nn.Sequential(
             nn.Conv2d(in_channels, features, kernel_size=4, stride=2, padding=1, padding_mode='reflect')
         )
-        self.down_layers = []
+        self.down_layers = nn.ModuleList()
         channel_multipliers = [min(8, 2**i) for i in range(n_layers)]
         in_multiplier = channel_multipliers[0]
         for out_multiplier in channel_multipliers[1:]:
@@ -225,7 +224,7 @@ class Generator(nn.Module):
             GenCNNBlock(
                 features*in_multiplier, features*in_multiplier, down=False, act='relu', use_dropout=False),
         )
-        self.up_layers = []
+        self.up_layers = nn.ModuleList()
         for out_multiplier in channel_multipliers[::-1][1:]:
             self.up_layers.append(GenCNNBlock(
                 features * in_multiplier * 2,
@@ -238,7 +237,7 @@ class Generator(nn.Module):
         )
 
     def forward(self, x):
-        x = self.inital(x)
+        x = self.initial(x)
         encoder_outputs = [x]
         for layer in self.down_layers:
             x = layer(x)
@@ -311,10 +310,11 @@ class Pix2Pix(SegmentationEngine):
             out_channels=self.config['out_channels']
         )
         self.disc = Discriminator(
-            self.config['in_channels']+self.config['out_channels'], self.config['disc_features'], self.config['out_channels'])
+            self.config['in_channels']+self.config['out_channels'],
+            self.config['disc_features'],
+            self.config['out_channels'])
 
     def training_step(self, batch, batch_nb):
-
         optimizer_d, optimizer_g = self.optimizers()
         self.toggle_optimizer(optimizer_g, optimizer_idx=1)
         outputs, g_loss = self.forward(batch, True, 1)
