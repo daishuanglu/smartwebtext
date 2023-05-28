@@ -15,8 +15,12 @@ print("Use deep learning device: %s, %s, %d devices." % (accelerator,device, num
 
 def latest_ckpt(logger_dir, model_name):
     list_of_files = glob.glob(os.path.join(logger_dir, '%s-epoch*.ckpt' % model_name))  # * means all if need specific format then *.csv
-    latest_file = max(list_of_files, key=os.path.getctime)
-    print("found latest checkpoint %s" % latest_file)
+    if list_of_files:
+        latest_file = max(list_of_files, key=os.path.getctime)
+        print("found latest checkpoint %s" % latest_file)
+    else:
+        latest_file = None
+        print("Not found latest checkpoint. ")
     return latest_file
 
 

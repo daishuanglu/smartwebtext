@@ -74,10 +74,6 @@ def main():
     model_obj = segmentation.Pix2Pix(
         config, multi_fname_sep=pipelines.A2D_FID_SEP).to(train_utils.device)
     print("model initialized. ")
-    list_of_files = glob.glob(os.path.join(logger_dir, '%s-epoch*.ckpt' % config[
-        'model_name']))  # * means all if need specific format then *.csv
-    latest_file = max(list_of_files, key=os.path.getctime)
-    print("found checkpoint %s" % latest_file)
     latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name']) \
         if config['resume_ckpt'] else None
     if not config.get('skip_training', False):

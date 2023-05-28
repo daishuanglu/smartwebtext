@@ -26,4 +26,4 @@ batch_size: 2
 clear_cache: False
 limit:
 logger_dir: 'lightning_logs'
-resume_ckpt: True
+resume_ckpt: False
