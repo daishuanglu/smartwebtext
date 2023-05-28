@@ -94,7 +94,7 @@ def main():
             batch_size=config['batch_size'],
             clear_cache=config['clear_cache'],
             shuffle=False,
-            sep=pipelines.KTH_ACTION_DATA_CSV_SEP,
+            sep=',',
             max_line=10 ** 7,
             limit=config.get('limit', None)
         )

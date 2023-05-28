@@ -64,13 +64,19 @@ class SegmentationEngine(ptl.LightningModule, ABC):
                  learning_rate,
                  predictions_fstr=None,
                  predictions_fsep=None,
-                 label_colors_json=None):
+                 label_colors_json=None,
+                 classifier = True):
         super(SegmentationEngine, self).__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
         self.criterion = BCEWithLogitsLoss()
         self.bsize = batch_size
         self.lr = learning_rate
+        self.classifier = classifier
+        if classifier:
+            print('Initializing Pix2pix image segmentor.')
+        else:
+            print('Initializing Pix2pix image generator.')
         self.predictions_fstr = predictions_fstr
         self.sep = predictions_fsep if predictions_fsep else None
         if not label_colors_json:
@@ -78,7 +84,12 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             self.label_colors = torch.tensor(label_colors)
         else:
             label_colors = color_utils.load_color_codes(label_colors_json)
-            self.label_colors = torch.tensor([d['color'] for d in label_colors])
+            ids = [d['id'] for d in label_colors]
+            self.label_colors = torch.tensor([d['color'] for d in label_colors]).to(device)
+            self.color_index = -torch.ones(max(ids) + 1)
+            for i, d in enumerate(label_colors):
+                self.color_index[d['id']] = i
+            self.color_index = self.color_index.long().to(device)
 
     def build_network(self):
         assert NotImplementedError(), 'Need to implement the network architecture.'
@@ -116,7 +127,13 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             for patch_coords, save_path in zip(sum(batch['patch_coords'], []), predictions_paths):
                 patch_segments = []
                 for i in range(len(patch_coords)):
-                    patch_segments.append(generate_color_segments(outputs[n].cpu(), self.label_colors))
+                    if self.classifier:
+                        classId = outputs[n].argmax(axis=-1)
+                        # Use gather to assign colors to each pixel location
+                        patch_segment = self.label_colors[classId].detach()
+                    else:
+                        patch_segment = outputs[n].detach() * 255.0
+                    patch_segments.append(patch_segment.cpu().numpy())
                     n += 1
                 color_segments = image_utils.patches_to_image(patch_segments, patch_coords)
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -134,8 +151,13 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             patches, patch_coords = image_utils.image_to_patches(
                 img, self.config['patch_size'])
             x, _ = self({'image': patches})
-            segment_patches = generate_color_segments(x, self.label_colors)
-            segment = image_utils.patches_to_image(segment_patches, patch_coords)
+            if self.classifier:
+                classId = x.argmax(axis=-1)
+                # Use gather to assign colors to each pixel location
+                patch_segments = self.label_colors[classId].detach().cpu().numpy()
+            else:
+                patch_segments = [p.cpu().numpy() * 255.0 for p in x]
+            segment = image_utils.patches_to_image(patch_segments, patch_coords)
             segments.append(segment)
         return segments
 
@@ -152,7 +174,6 @@ class DiscCNNBlock(nn.Module):
 
     def forward(self, x):
         return self.conv(x)
-
 
 class Discriminator(nn.Module):
     def __init__(self, in_channels, features=[64,128, 256, 512], out_channels=1):
@@ -296,10 +317,15 @@ class Pix2Pix(SegmentationEngine):
             learning_rate=config['learning_rate'],
             predictions_fstr=config.get('val_prediction_fstr', None),
             predictions_fsep=multi_fname_sep,
-            label_colors_json=config.get('label_colors_json', None))
+            label_colors_json=config.get('label_colors_json', None),
+            classifier=config.get('is_segmentor', True),
+        )
         self.config = config
         self.build_network()
-        self.bce = nn.BCEWithLogitsLoss()
+        if self.classifier:
+            self.bce = nn.BCEWithLogitsLoss()
+        else:
+            self.bce = nn.MSELoss()
         self.l1 = nn.L1Loss()
 
     def build_network(self):
@@ -307,15 +333,32 @@ class Pix2Pix(SegmentationEngine):
             self.config['in_channels'],
             features=self.config['gen_features'],
             n_layers=self.config['n_gen_enc'],
-            out_channels=self.config['out_channels']
+            out_channels=self.config['out_channels'] \
+                if self.classifier else self.config['in_channels']
         )
+        disc_input_channel = self.config['in_channels']+self.config['out_channels'] \
+            if self.classifier else self.config['in_channels'] * 2
+        disc_output_channel = self.config['out_channels'] \
+            if self.classifier else self.config['in_channels']
         self.disc = Discriminator(
-            self.config['in_channels']+self.config['out_channels'],
+            disc_input_channel,
             self.config['disc_features'],
-            self.config['out_channels'])
+            disc_output_channel)
 
     def training_step(self, batch, batch_nb):
         optimizer_d, optimizer_g = self.optimizers()
+        # train discriminator
+        # Measure discriminator's ability to classify real from generated samples
+        self.toggle_optimizer(optimizer_d, optimizer_idx=0)
+        #self.set_requires_grad(self.disc, True)  # enable backprop for D
+        outputs, d_loss = self.forward(batch, True, 0)
+        self.log("d_loss", d_loss.item(), prog_bar=True)
+        # self.log_dict({'d_loss': d_loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
+        self.manual_backward(d_loss)
+        optimizer_d.step()
+        optimizer_d.zero_grad()
+        self.untoggle_optimizer(optimizer_d)
+        #self.set_requires_grad(self.disc, False)  # enable backprop for D
         self.toggle_optimizer(optimizer_g, optimizer_idx=1)
         outputs, g_loss = self.forward(batch, True, 1)
         self.log("g_loss", g_loss.item(), prog_bar=True)
@@ -323,16 +366,6 @@ class Pix2Pix(SegmentationEngine):
         optimizer_g.step()
         optimizer_g.zero_grad()
         self.untoggle_optimizer(optimizer_g)
-        # train discriminator
-        # Measure discriminator's ability to classify real from generated samples
-        self.toggle_optimizer(optimizer_d, optimizer_idx=0)
-        outputs, d_loss = self.forward(batch, True, 0)
-        self.log("d_loss", d_loss.item(), prog_bar=True)
-        #self.log_dict({'d_loss': d_loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
-        self.manual_backward(d_loss)
-        optimizer_d.step()
-        optimizer_d.zero_grad()
-        self.untoggle_optimizer(optimizer_d)
 
     def configure_optimizers(self):
         b1, b2 = 0.5, 0.999
@@ -343,19 +376,23 @@ class Pix2Pix(SegmentationEngine):
     def forward(self, batch, compute_loss=False, optimizer_idx=0):
         x = flatten_list(batch['image'])
         x = torch.stack(x, dim=0).to(device)
-        x = x.permute(0, 3, 1, 2)
-        y_fake = self.gen(x.float())
+        x = x.permute(0, 3, 1, 2).float() / 255.0
+        y_fake = self.gen(x)
         if compute_loss:
             gt = flatten_list(batch['gt'])
-            targets = torch.stack(gt, dim=0).to(device)
-            targets = torch.minimum(torch.tensor(self.config['out_channels'] - 1), targets)
-            targets = F.one_hot(targets, num_classes=self.config['out_channels'])
-            targets = targets.permute(0, 3, 1, 2).float()
+            if not self.classifier:
+                gt_imgs = [self.label_colors[target.to(device)] for target in gt]
+                targets = torch.stack(gt_imgs, dim=0).float().to(device) / 255.0
+            else:
+                targets = torch.stack(gt, dim=0).to(device)
+                targets = self.color_index[targets.long()]
+                targets = F.one_hot(targets, num_classes=self.config['out_channels'])
+            targets = targets.permute(0, 3, 1, 2)
             if optimizer_idx == 0:
                 D_real = self.disc(x, targets)
                 D_fake = self.disc(x, y_fake.detach())
                 D_real_loss = self.bce(D_real, torch.ones_like(D_real))
-                D_fake_loss = self.bce(D_fake, torch.ones_like(D_fake))
+                D_fake_loss = self.bce(D_fake, torch.zeros_like(D_fake))
                 D_loss = (D_real_loss + D_fake_loss) / 2
                 return y_fake.permute(0, 2, 3, 1), D_loss
             if optimizer_idx == 1:
@@ -383,7 +420,7 @@ class UNet(SegmentationEngine):
             self.config['in_channels'],
             features=self.config['gen_features'],
             n_layers=self.config['n_gen_enc'],
-            out_channels=self.config['out_channels']
+            out_channels=self.config['in_channels']
         )
 
     def forward(self, batch, compute_loss=False, **kwargs):

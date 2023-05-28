@@ -9,8 +9,9 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 MODEL_OBJ_PATH = '{logger_dir}/{model_name}.pt'
 DEFAULT_LOGGER_DIR = 'default_lightning_log'
-accelerator, device = ("gpu", "cuda:0") if torch.cuda.is_available() else ("cpu", "cpu")
-print("Use deep learning device: %s, %s." % (accelerator,device))
+accelerator, device, num_devices = ("gpu", "cuda", torch.cuda.device_count()
+                                    ) if torch.cuda.is_available() else ("cpu", "cpu", 1)
+print("Use deep learning device: %s, %s, %d devices." % (accelerator,device, num_devices))
 
 def read_config(config_file):
     with open(config_file, "r") as f:
@@ -72,7 +73,7 @@ def training_pipeline(model, train_x, val_x, nepochs, resume_ckpt=False, model_n
     trainer = Trainer(
         max_epochs=nepochs+1 if ckpt_path else nepochs,
         resume_from_checkpoint = ckpt_path,
-        accelerator = accelerator, devices = 1,
+        accelerator = accelerator, devices = num_devices,
         enable_checkpointing = ckpt_path is None,
         callbacks=[checkpoint_callback]
     )

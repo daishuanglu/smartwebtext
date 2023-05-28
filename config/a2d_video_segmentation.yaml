@@ -8,6 +8,7 @@ val_prediction_fstr: 'val_predictions/{vid}/{fids}.jpg'
 skip_training: False
 input_size: [320, 768]
 # pix2pix settings
+segmentor: True
 patch_size: [256, 256]
 gen_features: 64
 n_gen_enc: 6
@@ -18,7 +19,6 @@ l1_lambda: 100
 out_channels: 64 #total 64 action-actor classes in A2D dataset
 features: [64, 128, 256, 512]
 bilinear: True
-
 #Settings
 learning_rate: 0.0001
 monitor: 'val_loss'

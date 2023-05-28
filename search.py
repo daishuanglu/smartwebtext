@@ -1,7 +1,7 @@
 import pandas as pd
 from embedding import LocalTopicAsEmbedding, GlobalTopicAsEmbedding
-from string_utils import *
-from ticker_utils import ticker_finder
+from utils.string_utils import *
+from utils.ticker_utils import ticker_finder
 from fastDamerauLevenshtein import damerauLevenshtein
 import time
 from collections import defaultdict
@@ -11,8 +11,8 @@ EMB_MODEL_PATH = "config/acct_topic_emb.yaml" # only do eval for this model.
 #EMB_MODEL_PATH = "config/topic_emb.yaml"
 
 VAL_DATA_PATH = "data_model/tte_validation_data_unnorm.csv"
-MODE = 'validation'
-#MODE = 'eval'
+#MODE = 'validation'
+MODE = 'eval'
 
 SRC_DF = pd.read_csv("data_model/ner_cleaned_title.csv")
 
