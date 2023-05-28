@@ -1,6 +1,6 @@
 from abc import ABC
 import pytorch_lightning as ptl
-from typing import Any, List
+from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,6 +9,7 @@ import PIL.Image as PilImage
 import re
 import os
 import itertools
+
 from utils.train_utils import device
 from utils import color_utils
 from utils import image_utils
@@ -146,13 +147,9 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             patches, patch_coords = image_utils.image_to_patches(
                 img, self.config['patch_size'])
             x, _ = self({'image': patches})
-            #if self.classifier:
-            #    classId = x.argmax(axis=-1)
-            # Use gather to assign colors to each pixel location
-            #    patch_segments = self.label_colors[classId].detach().cpu().numpy()
-            #else:
             patch_segments = [p.cpu().numpy() * 255.0 for p in x]
             segment = image_utils.patches_to_image(patch_segments, patch_coords)
+            segment = image_utils.assign_closest_color_codes(self.label_colors, segment)
             segments.append(segment)
         return segments
 
@@ -169,6 +166,7 @@ class DiscCNNBlock(nn.Module):
 
     def forward(self, x):
         return self.conv(x)
+
 
 class Discriminator(nn.Module):
     def __init__(self, in_channels, features=[64,128, 256, 512], out_channels=1):
@@ -195,6 +193,7 @@ class Discriminator(nn.Module):
             x = layer(x)
         x = self.output(x)
         return x
+
 
 class GenCNNBlock(nn.Module):
     def __init__(self, in_channels, out_channels, down=True, act="relu", use_dropout=False):

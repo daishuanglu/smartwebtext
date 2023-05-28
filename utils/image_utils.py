@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial import cKDTree
 
 
 def image_to_patches(image, patch_size):
@@ -72,6 +73,15 @@ def patches_to_image(patches, patch_coordinates):
         patch_counts[x:x+w, y:y+h, :] += 1
     image = np.divide(image, patch_counts, out=np.zeros_like(image), where=patch_counts!=0)
     return image.astype('uint8')
+
+
+def assign_closest_color_codes(segmentation_colors: np.array, np_img: np.array):
+    # Convert the segmentation colors to a numpy array
+    #segmentation_colors = torch.tensor(segmentation_colors, dtype=torch.uint8)
+    tree = cKDTree(segmentation_colors)
+    _, indices = tree.query(np_img)
+    segmented_image_data = segmentation_colors[indices].reshape(np_img.shape)
+    return segmented_image_data
 
 
 if __name__=='__main__':
