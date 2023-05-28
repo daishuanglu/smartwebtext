@@ -1,9 +1,9 @@
 model_name: 'a2d_video_image_segmentor'
 train_val_ratio: [0.95, 0.05]
 skip_prep_data: True
-dataset_dir: 'D:/video_datasets/A2D'
-label_colors_json: 'D:/video_datasets/A2D/label_colors.json'
-val_prediction_fstr: 'val_predictions/{vid}/{fids}.jpg'
+dataset_dir: '/home/shuangludai/A2D'
+label_colors_json: '/home/shuangludai/A2D/label_colors.json'
+val_prediction_fstr:  'val_predictions/{vid}/{fids}.jpg'
 #Model
 skip_training: False
 input_size: [320, 768]
