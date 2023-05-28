@@ -9,7 +9,6 @@ d='predictions'
 e="setup"
 f="model"
 g="log"
-h="config"
 if [ $1 == $g ]
 then
   echo "download lightning logs ..."
@@ -38,7 +37,7 @@ then
   scp -r experiments shuangludai@$IP:/home/shuangludai/$fdir
   scp requirements.txt shuangludai@$IP:/home/shuangludai/$fdir
   scp envrc.sh shuangludai@$IP:/home/shuangludai/$fdir
-  #scp -r config shuangludai@$IP:/home/shuangludai/$fdir
+  scp -r config shuangludai@$IP:/home/shuangludai/$fdir
   scp -r svo shuangludai@$IP:/home/shuangludai/$fdir
   #scp -r evaluation shuangludai@$IP:/home/shuangludai/$fdir
   scp -r professional shuangludai@$IP:/home/shuangludai/$fdir

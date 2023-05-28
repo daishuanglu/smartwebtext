@@ -1,9 +1,7 @@
 import os
-import glob
 
 import pandas as pd
 import torch
-
 import numpy as np
 import h5py
 from tqdm import tqdm
@@ -54,7 +52,7 @@ def load_a2d_label_map_patches(dataset_dir, feature_dict, patch_size=(256, 256))
 
 
 def main():
-    config = train_utils.read_config("config/a2d_video_segmentation.yaml")
+    config = train_utils.read_config("config/a2d_video_segmentation_gcp.yaml")
     if not config.get("skip_prep_data", False):
         pipelines.a2d_video_images(
             config['dataset_dir'], config['label_colors_json'], config['train_val_ratio'])
