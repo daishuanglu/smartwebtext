@@ -74,6 +74,12 @@ def main():
     model_obj = segmentation.Pix2Pix(
         config, multi_fname_sep=pipelines.A2D_FID_SEP).to(train_utils.device)
     print("model initialized. ")
+    list_of_files = glob.glob(os.path.join(logger_dir, '%s-epoch*.ckpt' % config[
+        'model_name']))  # * means all if need specific format then *.csv
+    latest_file = max(list_of_files, key=os.path.getctime)
+    print("found checkpoint %s" % latest_file)
+    latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name']) \
+        if config['resume_ckpt'] else None
     if not config.get('skip_training', False):
         print("create training -validation dataloader")
         train_dl = data_utils.get_context_csv_data_loader(
@@ -104,20 +110,16 @@ def main():
             train_dl,
             val_x=val_dl,
             nepochs=config['epochs'],
-            resume_ckpt=config['resume_ckpt'],
+            resume_ckpt=latest_ckpt_path,
             model_name=config['model_name'],
             monitor=config['monitor'],
             logger_path=logger_dir)
-
-    list_of_files = glob.glob(os.path.join(config['logger_dir'], '%s-epoch*.ckpt' % config[
-        'model_name']))  # * means all if need specific format then *.csv
-    latest_file = max(list_of_files, key=os.path.getctime)
-    print("found checkpoint %s" % latest_file)
     print('-----------------  done training ----------------------------')
     model_eval_dir = 'evaluation/A2D_test_predictions/%s' % config['model_name']
+    latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name'])
     os.makedirs(model_eval_dir, exist_ok=True)
     print("generate evaluation results. ")
-    model = train_utils.load(model_obj, latest_file)
+    model = train_utils.load(model_obj, latest_ckpt_path)
     test_meta_path = pipelines.A2D_IMAGE_SPLIT_CSV.format(root=config['dataset_dir'], split='test')
     df_test_meta = pd.read_csv(
         test_meta_path, dtype=str, parse_dates=False, na_values=[], keep_default_na=False)

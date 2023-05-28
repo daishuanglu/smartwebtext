@@ -13,10 +13,18 @@ accelerator, device, num_devices = ("gpu", "cuda", torch.cuda.device_count()
                                     ) if torch.cuda.is_available() else ("cpu", "cpu", 1)
 print("Use deep learning device: %s, %s, %d devices." % (accelerator,device, num_devices))
 
+def latest_ckpt(logger_dir, model_name):
+    list_of_files = glob.glob(os.path.join(logger_dir, '%s-epoch*.ckpt' % model_name))  # * means all if need specific format then *.csv
+    latest_file = max(list_of_files, key=os.path.getctime)
+    print("found latest checkpoint %s" % latest_file)
+    return latest_file
+
+
 def read_config(config_file):
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
     return config
+
 
 def load(model, state_dict_path):
     #model = torch.load(model_obj_path, pickle_module=dill, encoding='utf-8')
@@ -26,9 +34,11 @@ def load(model, state_dict_path):
     model.load_state_dict(state_dict)
     return model
 
+
 def save(model, PATH):
     torch.save(model.state_dict(), PATH)
     return
+
 
 def save_best(cur, prev, config, model):
     def _monitor_criterion(cur, prev):
@@ -45,19 +55,11 @@ def save_best(cur, prev, config, model):
         return False
 
 
-def training_pipeline(model, train_x, val_x, nepochs, resume_ckpt=False, model_name='cf_model',
-                      default_ckpt_pattern="./lightning_logs/version_*", monitor="val_loss", logger_path=None):
+def training_pipeline(
+        model,train_x, val_x, nepochs, model_name, resume_ckpt='',
+        monitor="val_loss", logger_path=None):
     #torch.jit.script(model)
-    ckpt_path = None
-    if resume_ckpt:
-        ckpt_paths = glob.glob(default_ckpt_pattern)
-        versions = [int(p.split("_")[-1]) for p in ckpt_paths]
-        if versions:
-            ckpt_version = str(max(versions))
-            ckpt_path = default_ckpt_pattern.replace('*', ckpt_version)
-            ckpt_paths = glob.glob(os.path.join(ckpt_path, "checkpoints/*.ckpt"))
-            ckpt_path = ckpt_paths[-1] if ckpt_paths else None
-
+    ckpt_path = resume_ckpt if resume_ckpt else None
     print('torch jit script trainer')
     os.system("free -h")
     gpu_usage()
@@ -67,14 +69,18 @@ def training_pipeline(model, train_x, val_x, nepochs, resume_ckpt=False, model_n
     checkpoint_callback = ModelCheckpoint(
         monitor = monitor,
         dirpath = logger_path,
-        filename = ('%s-epoch{epoch:02d}-val_loss{val/loss:.2f}' % model_name),
-        auto_insert_metric_name = False
+        filename = ('%s-epoch{epoch:02d}-val_loss{val_loss:.2f}' % model_name),
+        auto_insert_metric_name = False,
+        mode='min'
     )
+    if ckpt_path:
+        print('Resume training from check point: %s' % ckpt_path)
     trainer = Trainer(
         max_epochs=nepochs+1 if ckpt_path else nepochs,
         resume_from_checkpoint = ckpt_path,
-        accelerator = accelerator, devices = num_devices,
-        enable_checkpointing = ckpt_path is None,
+        accelerator = accelerator,
+        devices = num_devices,
+        enable_checkpointing = True, # because we always have checkpoint callback
         callbacks=[checkpoint_callback]
     )
     #print(model)
