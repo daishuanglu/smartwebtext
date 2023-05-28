@@ -8,7 +8,6 @@ val_prediction_fstr: 'val_predictions/{vid}/{fids}.jpg'
 skip_training: False
 input_size: [320, 768]
 # pix2pix settings
-is_segmentor: False
 patch_size: [256, 256]
 gen_features: 64
 n_gen_enc: 6

@@ -1,0 +1,46 @@
+batch_size: 2
+config:
+  batch_size: 2
+  bilinear: true
+  clear_cache: false
+  dataset_dir: D:/video_datasets/A2D
+  disc_features:
+  - 64
+  - 128
+  - 256
+  - 512
+  epochs: 50
+  features:
+  - 64
+  - 128
+  - 256
+  - 512
+  gen_features: 64
+  in_channels: 3
+  input_size:
+  - 320
+  - 768
+  l1_lambda: 100
+  label_colors_json: D:/video_datasets/A2D/label_colors.json
+  learning_rate: 0.0001
+  limit: null
+  logger_dir: lightning_logs
+  model_name: a2d_video_image_segmentor
+  monitor: val_loss
+  n_gen_enc: 6
+  out_channels: 64
+  patch_size:
+  - 256
+  - 256
+  resume_ckpt: true
+  skip_prep_data: false
+  skip_training: false
+  train_val_ratio:
+  - 0.95
+  - 0.05
+  val_prediction_fstr: val_predictions/{vid}/{fids}.jpg
+label_colors_json: D:/video_datasets/A2D/label_colors.json
+learning_rate: 0.0001
+multi_fname_sep: ;;;
+predictions_fsep: ;;;
+predictions_fstr: val_predictions/{vid}/{fids}.jpg
