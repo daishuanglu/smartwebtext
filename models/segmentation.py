@@ -64,19 +64,14 @@ class SegmentationEngine(ptl.LightningModule, ABC):
                  learning_rate,
                  predictions_fstr=None,
                  predictions_fsep=None,
-                 label_colors_json=None,
-                 classifier = True):
+                 label_colors_json=None):
         super(SegmentationEngine, self).__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
         self.criterion = BCEWithLogitsLoss()
         self.bsize = batch_size
         self.lr = learning_rate
-        self.classifier = classifier
-        if classifier:
-            print('Initializing Pix2pix image segmentor.')
-        else:
-            print('Initializing Pix2pix image generator.')
+        print('Initializing Pix2pix image segment color generator.')
         self.predictions_fstr = predictions_fstr
         self.sep = predictions_fsep if predictions_fsep else None
         if not label_colors_json:
@@ -127,12 +122,12 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             for patch_coords, save_path in zip(sum(batch['patch_coords'], []), predictions_paths):
                 patch_segments = []
                 for i in range(len(patch_coords)):
-                    if self.classifier:
-                        classId = outputs[n].argmax(axis=-1)
-                        # Use gather to assign colors to each pixel location
-                        patch_segment = self.label_colors[classId].detach()
-                    else:
-                        patch_segment = outputs[n].detach() * 255.0
+                    #if self.classifier:
+                    #    classId = outputs[n].argmax(axis=-1)
+                    # Use gather to assign colors to each pixel location
+                    #    patch_segment = self.label_colors[classId].detach()
+                    #else:
+                    patch_segment = outputs[n].detach() * 255.0
                     patch_segments.append(patch_segment.cpu().numpy())
                     n += 1
                 color_segments = image_utils.patches_to_image(patch_segments, patch_coords)
@@ -151,12 +146,12 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             patches, patch_coords = image_utils.image_to_patches(
                 img, self.config['patch_size'])
             x, _ = self({'image': patches})
-            if self.classifier:
-                classId = x.argmax(axis=-1)
-                # Use gather to assign colors to each pixel location
-                patch_segments = self.label_colors[classId].detach().cpu().numpy()
-            else:
-                patch_segments = [p.cpu().numpy() * 255.0 for p in x]
+            #if self.classifier:
+            #    classId = x.argmax(axis=-1)
+            # Use gather to assign colors to each pixel location
+            #    patch_segments = self.label_colors[classId].detach().cpu().numpy()
+            #else:
+            patch_segments = [p.cpu().numpy() * 255.0 for p in x]
             segment = image_utils.patches_to_image(patch_segments, patch_coords)
             segments.append(segment)
         return segments
@@ -317,15 +312,11 @@ class Pix2Pix(SegmentationEngine):
             learning_rate=config['learning_rate'],
             predictions_fstr=config.get('val_prediction_fstr', None),
             predictions_fsep=multi_fname_sep,
-            label_colors_json=config.get('label_colors_json', None),
-            classifier=config.get('is_segmentor', True),
+            label_colors_json=config.get('label_colors_json', None)
         )
         self.config = config
         self.build_network()
-        if self.classifier:
-            self.bce = nn.BCEWithLogitsLoss()
-        else:
-            self.bce = nn.MSELoss()
+        self.bce = nn.MSELoss()
         self.l1 = nn.L1Loss()
 
     def build_network(self):
@@ -333,13 +324,10 @@ class Pix2Pix(SegmentationEngine):
             self.config['in_channels'],
             features=self.config['gen_features'],
             n_layers=self.config['n_gen_enc'],
-            out_channels=self.config['out_channels'] \
-                if self.classifier else self.config['in_channels']
+            out_channels=self.config['in_channels']
         )
-        disc_input_channel = self.config['in_channels']+self.config['out_channels'] \
-            if self.classifier else self.config['in_channels'] * 2
-        disc_output_channel = self.config['out_channels'] \
-            if self.classifier else self.config['in_channels']
+        disc_input_channel = self.config['in_channels'] * 2
+        disc_output_channel = self.config['in_channels']
         self.disc = Discriminator(
             disc_input_channel,
             self.config['disc_features'],
@@ -380,13 +368,10 @@ class Pix2Pix(SegmentationEngine):
         y_fake = self.gen(x)
         if compute_loss:
             gt = flatten_list(batch['gt'])
-            if not self.classifier:
-                gt_imgs = [self.label_colors[target.to(device)] for target in gt]
-                targets = torch.stack(gt_imgs, dim=0).float().to(device) / 255.0
-            else:
-                targets = torch.stack(gt, dim=0).to(device)
-                targets = self.color_index[targets.long()]
-                targets = F.one_hot(targets, num_classes=self.config['out_channels'])
+            gt_imgs = [self.label_colors[self.color_index[target.to(device)]] for target in gt]
+            targets = torch.stack(gt_imgs, dim=0).float().to(device) / 255.0
+            #targets = self.color_index[targets.long()]
+            #targets = F.one_hot(targets, num_classes=self.config['out_channels'])
             targets = targets.permute(0, 3, 1, 2)
             if optimizer_idx == 0:
                 D_real = self.disc(x, targets)

@@ -74,7 +74,7 @@ def training_pipeline(model, train_x, val_x, nepochs, resume_ckpt=False, model_n
         max_epochs=nepochs+1 if ckpt_path else nepochs,
         resume_from_checkpoint = ckpt_path,
         accelerator = accelerator, devices = num_devices,
-        enable_checkpointing = ckpt_path is None,
+        enable_checkpointing = ckpt_path is not None,
         callbacks=[checkpoint_callback]
     )
     #print(model)
