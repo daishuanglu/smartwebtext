@@ -102,6 +102,7 @@ A2D_METADATA_COLUMNS = [
     'start_time', 'end_time', 'height', 'width', 'num_frames', 'num_labeled_frames', 'split_no']
 A2D_METADATA_PATH = '{root}/A2D_main_1_0/Release/videoset.csv'
 A2D_CLIP_PATH = '{root}/A2D_main_1_0/Release/clips320H/{vid}.mp4'
+A2D_SAM_OUTPUT_CLIP_PATH = '{root}/A2D_main_1_0/Release/clips320H_sam/{vid}.mp4'
 A2D_ANNOTATION_PATH = '{root}/A2D_main_1_0/Release/Annotations/mat/{vid}/{fid}.mat'
 A2D_ANNO_COLOR_MAP_PATH ='{root}/A2D_main_1_0/Release/Annotations/col/{vid}/{fid}.png'
 A2D_IMAGE_SPLIT_CSV = 'data_model/A2D_video_image_{split}.csv'
@@ -120,6 +121,7 @@ def a2d_video_images(dataset_dir, label_colors_json, train_val_ratio=[0.95, 0.05
     df_meta = pd.read_csv(
         A2D_METADATA_PATH.format(root=dataset_dir), header=None,
         dtype=str, na_values=[], parse_dates=False, keep_default_na=False)
+    os.makedirs(os.path.dirname(A2D_SAM_OUTPUT_CLIP_PATH), exist_ok=True)
     df_meta.columns = A2D_METADATA_COLUMNS
     df_meta['split'] = df_meta['split_no'].apply(lambda x: np.random.choice(
         ['train', 'val'], 1, p=train_val_ratio, replace=True)[0] if x == '0' else 'test')

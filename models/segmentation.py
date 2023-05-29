@@ -1,10 +1,10 @@
 from abc import ABC
 import pytorch_lightning as ptl
-from typing import Any
+from typing import Any, List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import numpy as np
 import PIL.Image as PilImage
 import re
 import os
@@ -140,16 +140,18 @@ class SegmentationEngine(ptl.LightningModule, ABC):
     def configure_optimizers(self):
         return [torch.optim.AdamW(params=self.parameters(), lr=self.lr)], []
 
-    def segments(self, list_of_images):
+    def segments(self, list_of_images: List[np.array]):
         self.eval()
         segments = []
         for img in list_of_images:
             patches, patch_coords = image_utils.image_to_patches(
                 img, self.config['patch_size'])
-            x, _ = self({'image': patches})
-            patch_segments = [p.cpu().numpy() * 255.0 for p in x]
+            x, _ = self({'image': [torch.from_numpy(p) for p in patches]})
+            x = x.detach() * 255.0
+            patch_segments = [p.cpu().numpy() for p in x]
             segment = image_utils.patches_to_image(patch_segments, patch_coords)
-            segment = image_utils.assign_closest_color_codes(self.label_colors, segment)
+            #segment = image_utils.assign_closest_color_code(
+            #    self.label_colors.detach().numpy(), segment)
             segments.append(segment)
         return segments
 

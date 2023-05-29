@@ -52,7 +52,7 @@ def load_a2d_label_map_patches(dataset_dir, feature_dict, patch_size=(256, 256))
 
 
 def main():
-    config = train_utils.read_config("config/a2d_video_segmentation_gcp.yaml")
+    config = train_utils.read_config("config/a2d_video_segmentation.yaml")
     if not config.get("skip_prep_data", False):
         pipelines.a2d_video_images(
             config['dataset_dir'], config['label_colors_json'], config['train_val_ratio'])
@@ -117,7 +117,7 @@ def main():
     test_meta_path = pipelines.A2D_IMAGE_SPLIT_CSV.format(root=config['dataset_dir'], split='test')
     df_test_meta = pd.read_csv(
         test_meta_path, dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
-    for _, row in tqdm(df_test_meta.iterrows(), desc='A2D test video segmentation'):
+    for _, row in tqdm(df_test_meta.iterrows(), total=len(df_test_meta), desc='A2D test video segmentation'):
         os.makedirs(os.path.join(model_eval_dir, row['vid']), exist_ok=True)
         vf = pipelines.A2D_CLIP_PATH.format(root=config['dataset_dir'], vid=row['vid'])
         v = pims.Video(vf)

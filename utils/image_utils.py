@@ -75,7 +75,7 @@ def patches_to_image(patches, patch_coordinates):
     return image.astype('uint8')
 
 
-def assign_closest_color_codes(segmentation_colors: np.array, np_img: np.array):
+def assign_closest_color_code(segmentation_colors: np.array, np_img: np.array):
     # Convert the segmentation colors to a numpy array
     #segmentation_colors = torch.tensor(segmentation_colors, dtype=torch.uint8)
     tree = cKDTree(segmentation_colors)
