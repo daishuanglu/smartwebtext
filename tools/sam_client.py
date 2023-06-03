@@ -21,6 +21,9 @@ from utils import color_utils
 VIT_H_SAM_URL = 'https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth'
 VIT_L_SAM_URL  = 'https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth'
 VIT_B_SAM_URL  = 'https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth'
+MAX_NUM_COLORS = 500
+# remove the (0,0,0) background color
+SEGMENT_COLORS = color_utils.generate_colors(MAX_NUM_COLORS+1)[1:]
 
 
 class SAMClient():
@@ -45,7 +48,7 @@ class SAMClient():
 
     def segmented(self, image: np.array):
         masks = self.mask_generator.generate(image)
-        colors = color_utils.generate_colors(len(masks))
+        colors = SEGMENT_COLORS[:len(masks)].copy()
         color_mask = np.zeros_like(image)
         for mask, color in zip(masks, colors):
             color_mask[mask['segmentation']] = color
