@@ -54,6 +54,7 @@ class SAMClient():
     def segment_video(self, video_path, output_fname):
         os.makedirs(os.path.dirname(output_fname), exist_ok=True)
         v = pims.Video(video_path)
+        #print('processing video clip %s' % video_path)
         # Define the output video codec using fourCC code (H.264 codec)
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         width, height = v.frame_shape[1], v.frame_shape[0]
