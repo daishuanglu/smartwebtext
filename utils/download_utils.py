@@ -49,13 +49,6 @@ def extract_google_drive_file_id(link):
     file_id = match.group(1)
     return file_id
 
-
-def download_url(url, save_path, chunk_size=128):
-    r = requests.get(url, stream=True)
-    with open(save_path, 'wb') as fd:
-        for chunk in r.iter_content(chunk_size=chunk_size):
-            fd.write(chunk)
-
 #create this bar_progress method which is invoked automatically from wget
 def bar_progress(current, total, width=80):
   progress_message = "Downloading: %d%% [%d / %d] bytes" % (current / total * 100, current, total)
@@ -63,6 +56,17 @@ def bar_progress(current, total, width=80):
   sys.stdout.write("\r" + progress_message)
   sys.stdout.flush()
 
+
+def download_url(url, save_path, chunk_size=None):
+    if chunk_size is not None:
+        r = requests.get(url, stream=True)
+        with open(save_path, 'wb') as fd:
+            for chunk in r.iter_content(chunk_size=chunk_size):
+                fd.write(chunk)
+    else:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        wget.download(url, bar=bar_progress, out=save_path)
+        print(f"File downloaded to: {save_path}")
 
 def dl(url, output_fname):
     filename = url.split('/')[-1] if output_fname is None else output_fname

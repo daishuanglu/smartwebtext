@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eux
 fdir=${2:-"smartwebtext"}
-IP="35.233.146.52"
+IP="35.185.212.101"
 a="code"
 b="prnews"
 c="fasttext"
@@ -41,6 +41,7 @@ then
   scp -r svo shuangludai@$IP:/home/shuangludai/$fdir
   #scp -r evaluation shuangludai@$IP:/home/shuangludai/$fdir
   scp -r professional shuangludai@$IP:/home/shuangludai/$fdir
+  scp -r tools shuangludai@$IP:/home/shuangludai/$fdir
   scp env_setup.sh shuangludai@$IP:/home/shuangludai/$fdir
 fi
 if [ $1 == $b ]

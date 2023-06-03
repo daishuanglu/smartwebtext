@@ -30,4 +30,7 @@ timm
 wget
 p_tqdm
 h5py
+opencv-python
+pycocotools
+matplotlib
 # How to use tensorboard: tensorboard --logdir=$EVENTS_FOLDER
