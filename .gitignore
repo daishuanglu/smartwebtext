@@ -7,6 +7,7 @@ tmp/
 .vscode/
 .cache
 data/
+data_model/
 fasttext/
 **/__pycache__
 *.ipynb_checkpoints/

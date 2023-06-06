@@ -18,7 +18,6 @@ from torch import nn
 from sentence_transformers import evaluation
 from sentence_transformers import util as sbert_util
 from tqdm import tqdm
-from sklearn.metrics.pairwise import euclidean_distances, cosine_distances
 from itertools import product
 from utils.train_utils import read_config, device
 

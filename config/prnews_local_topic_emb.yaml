@@ -1,0 +1,28 @@
+model_name: 'prnews_local_topic_emb'
+logger_dir: 'lightning_logs'
+skip_prep_data: False
+train_data_path: "data_model/prnews_topic_emb_training.csv"
+val_data_path: "data_model/prnews_topic_emb_validation.csv"
+train_val_split_ratio: [0.98, 0.02]
+text_col: "Text"
+ref_col: "Company"
+limit:
+
+skip_training: False
+clear_cache: True
+bert_model_name: 'distilbert-base-uncased'
+ref_emb_size: 256
+en1_units: 128
+en2_units: 256
+num_topic: 32
+batch_size: 32
+learning_rate: 0.001
+momentum: 0.99
+init_mult: 1.0
+variance: 0.995
+max_doc_length: 512
+max_ref_length: 32
+
+epochs: 50
+resume_ckpt: True
+monitor: 'val_perp'

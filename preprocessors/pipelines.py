@@ -1,14 +1,14 @@
 import math
 import numpy as np
 import os
-
+from typing import Dict, List
 import pandas as pd
 import glob
 from tqdm import tqdm
 from utils import string_utils
 from utils import color_utils
 from preprocessors import dataloader
-
+import time
 
 PRNEWS_FILEPATTERN = 'data_model/scrapped_news/webtext_thread_*.txt'
 PRNEWS_SEPARATOR = '\t'
@@ -19,6 +19,7 @@ PRNEWS_SENTENCE_MIN_WORDS = 5
 PRNEWS_PARAGRAPH_SEP = ';;;;'
 PRNEWS_DATA_SEP = '\t'
 PRNEWS_MUST_CONTAIN_COLS = ['Text', 'Company']
+PRNEWS_EVAL_DIR = 'evaluation/prnews_accounting'
 
 KTH_ACTION_SRC_CSV = 'data_model/kth_actions.csv'
 KTH_ACTIONS = ['boxing', 'handclapping', 'handwaving', 'jogging', 'running', 'walking']
@@ -43,7 +44,8 @@ def prnews_text_preproc(s):
     return PRNEWS_PARAGRAPH_SEP.join(s).strip()
 
 
-def prnews(output_files, split_ratio, vocab_path):
+def prnews(
+        output_files, split_ratio, vocabs: Dict[str, List[str]] = None):
 
     def _body(s):
         return prnews_text_preproc(s)
@@ -66,10 +68,33 @@ def prnews(output_files, split_ratio, vocab_path):
     textfile.write(
         output_files=output_files,
         split_ratio=split_ratio,
-        cols=['Company', 'Text'],
+        cols=['Company', 'Title', 'Text'],
         explode_sep=PRNEWS_PARAGRAPH_SEP,
         sep=PRNEWS_DATA_SEP)
-    textfile.vocab(['Company'], vocab_path)
+    for vocab_path, vocab_cols in vocabs.items():
+        textfile.vocab(vocab_cols, vocab_path)
+
+
+def prnews_negatives(data_path,  ref_col, score_col, neg_ratio=1.0):
+    print('add negative samples for %s' % data_path)
+    df = pd.read_csv(
+        data_path, sep=PRNEWS_DATA_SEP,
+        dtype=str, keep_default_na=False, na_values=[], parse_dates=False)
+    df[score_col] = 1.0
+    df_uniq_refs = df[ref_col].value_counts()
+    print('unique reference values')
+    print(df_uniq_refs)
+    os.remove(data_path)
+    start_time = time.time()
+    for i, (ref, counts) in enumerate(df_uniq_refs.iteritems()):
+        n_neg_samples = int(math.ceil(counts * neg_ratio))
+        df_pos = df[df[ref_col] == ref]
+        df_negs = df[df[ref_col] != ref]
+        df_neg_sampled = df_negs.sample(n=n_neg_samples, replace=n_neg_samples<len(df_negs))
+        df_neg_sampled[score_col] = 0.0
+        pd.concat([df_pos, df_neg_sampled]).to_csv(
+            data_path, sep=PRNEWS_DATA_SEP, mode='w' if i==0 else 'a', index=False, header=(i == 0))
+        print('%d/%d %s, %d secs.' % (i+1, len(df_uniq_refs), ref, int(time.time()-start_time)))
     return
 
 

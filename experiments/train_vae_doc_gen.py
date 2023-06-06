@@ -11,8 +11,9 @@ def main():
     config = train_utils.read_config("config/vae_doc_user_gen.yaml")
     if not config.get("skip_prep_data", False):
         pipelines.prnews(
-            [config['train_data_path'], config['val_data_path']],
-            config['train_val_split_ratio'], config['user_vocab_path'])
+            output_files=[config['train_data_path'], config['val_data_path']],
+            split_ratio=config['train_val_split_ratio'],
+            vocabs={config['user_vocab_path']: [config['ref_col']]})
 
     config['logger_dir'] = config.get('logger_dir', train_utils.DEFAULT_LOGGER_DIR)
     model_obj = vae_doc_generator.ConditionalDocGenerator(config)

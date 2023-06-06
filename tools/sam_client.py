@@ -47,11 +47,12 @@ class SAMClient():
         self.mask_generator = SamAutomaticMaskGenerator(sam)
 
     def segmented(self, image: np.array):
-        masks = self.mask_generator.generate(image)
-        colors = SEGMENT_COLORS[:len(masks)].copy()
+        anns = self.mask_generator.generate(image)
+        sorted_anns = sorted(anns, key=(lambda x: x['area']), reverse=True)
+        colors = SEGMENT_COLORS[:len(anns)].copy()
         color_mask = np.zeros_like(image)
-        for mask, color in zip(masks, colors):
-            color_mask[mask['segmentation']] = color
+        for ann, color in zip(sorted_anns, colors):
+            color_mask[ann['segmentation']] = color
         return color_mask
 
     def segment_video(self, video_path, output_fname):
