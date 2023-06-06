@@ -1,7 +1,7 @@
 
 import numpy as np
 from collections import defaultdict
-from sklearn.metrics import average_precision_score,precision_recall_curve, precision_score,recall_score
+from sklearn.metrics import average_precision_score,precision_recall_curve
 import matplotlib.pyplot as plt
 
 from typing import Dict, Any
@@ -10,19 +10,19 @@ import pandas as pd
 from tabulate import tabulate
 
 
-f=open("MTurk/MTurkTemplate.txt",'r')
+f=open("evaluators/prnews/MTurk/MTurkTemplate.txt",'r')
 template=f.readlines()
 f.close()
 
-f=open("MTurk/MTurkHead.txt",'r')
+f=open("evaluators/prnews/MTurk/MTurkHead.txt",'r')
 head=f.readlines()
 f.close()
 
-f=open("MTurk/MTurkTail.txt",'r')
+f=open("evaluators/prnews/MTurk/MTurkTail.txt",'r')
 tail=f.readlines()
 f.close()
 
-df_batch_tic = pd.read_csv('MTurk/MTurk_eval_tics.csv')
+df_batch_tic = pd.read_csv('evaluators/prnews/MTurk/MTurk_eval_tics.csv')
 df_batch_tic = df_batch_tic[['tic', 'company']]
 
 eval_terms = ["analytics","innovation","technology"]
@@ -57,7 +57,7 @@ def render_mturk_html(df):
         block,val_id,box_id=get_block(i,val_id,box_id)
         blocks += block
 
-    fo=open("MTurk/renderedTurk.txt",'w')
+    fo=open("evaluators/prnews/MTurk/renderedTurk.txt",'w')
     fo.writelines(head+blocks+tail)
     fo.close()
 
@@ -106,7 +106,7 @@ def majority_vote(df):
 
 
 def join_pred_gt(df_pred, df_gt):
-    df_predict = pd.merge(df_pred, df_gt, how='left', left_index=True, right_index=True).dropna()
+    df_predict = pd.merge(df_gt, df_pred , how='left', left_index=True, right_index=True)
     df_gt_local = df_predict[df_gt.columns]
     return df_predict, df_gt_local
 
@@ -209,81 +209,103 @@ def cf_haskey(eval_data_path, context_col, ref_col, eval_refs, query_kws):
 
 
 
-def score(predictions, groundtruths, score_col, w, n_samples, propred_file=None):
-    df_predict, df_gt_local = join_pred_gt(predictions, groundtruths)
-    if propred_file is not None:
-        propred_df = pd.read_csv(propred_file)
-        cols = list(propred_df.columns)
-        eval_col_id = np.argmax([damerauLevenshtein(score_col, col, similarity=True) for col in cols])
-        eval_col = cols[eval_col_id]
+def score(predictions, groundtruths):
+    # Find missing indices in series2 compared to series1
+    missing_indices = groundtruths.index.difference(predictions.index)
+    # Add missing indices to series2 with NaN values
+    predictions = predictions.append(pd.Series(index=missing_indices, dtype='float'))
+    predictions = predictions.loc[groundtruths.index]
+    n_samples = len(predictions)
+    print('%d/%d missing predictions.' % (predictions.isna().sum(), n_samples))
     thresholds = np.linspace(0, 1, num=101)
     df_prec_rec = defaultdict(list)
     for th in thresholds:
-        if propred_file is not None:
-            df_prec_rec['recall'].append((propred_df[eval_col]> th ).mean())
-        else:
-            rec = recall_score(df_gt_local[w], df_predict[score_col] > th)
-            df_prec_rec['recall'].append(rec * len(df_predict) / n_samples)
-            # df_prec_rec['recall'].append(rec)
-        df_prec_rec['precision'].append(precision_score(df_gt_local[w], df_predict[score_col]>th))
-        df_prec_rec['threshold'].append(th)
+       rec = (predictions > th).sum()/n_samples
+       df_prec_rec['recall'].append(rec)
+       # df_prec_rec['recall'].append(rec)
+       pos_ids = (predictions > th)
+       pos_ids = groundtruths[pos_ids]
+       TP = (predictions[pos_ids] == groundtruths[pos_ids]).sum()
+       df_prec_rec['precision'].append(TP / (pos_ids.sum()+ 1e-6))
+       df_prec_rec['threshold'].append(th)
     df_prec_rec = pd.DataFrame.from_dict(df_prec_rec)
     df_prec_rec = df_prec_rec.sort_values(by=['precision', 'recall'], ascending=False)
-    idx = df_prec_rec.groupby('precision')['recall'].idxmax()
-    df_prec_rec = df_prec_rec.loc[idx].sort_values(by='recall')
+    #idx = df_prec_rec.groupby('precision')['recall'].idxmax()
+    df_prec_rec = df_prec_rec.drop_duplicates(subset = ['recall'], keep = 'first')
+    df_prec_rec = df_prec_rec.sort_values(by='recall')
     return df_prec_rec
+
+
+def load_predictions_df(prediction_files, index_key):
+    merged_data = None
+    for file in prediction_files:
+        df = pd.read_csv(file, parse_dates=False, keep_default_na=False, na_values=[])
+        df = df.set_index(index_key)
+        df = df[[col for col in df.columns if ':' in col]]
+        if merged_data is None:
+            merged_data = df
+        else:
+            merged_data = pd.merge(
+                merged_data, df, left_index=True, right_index=True, how='outer')
+    return merged_data
+
+
+def load_gt(index_key):
+    pro_label_file = ''
+    df_gt = pd.read_csv(
+        pro_label_file, dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
+    print('%d groundtruth company labels loaded. ' % len(df_gt))
+    df_gt = df_gt.set_index(index_key)
+    return df_gt
+
+
+def load_MTurk(index_key):
+    batch_file = "evaluators/prnews/MTurk/Batch_4766827_batch_results.csv"
+    df_vote = append_MTurk_batch_response(batch_file)
+    df_maj_vote = majority_vote(df_vote)
+    df_maj_vote = df_maj_vote.drop_duplicates('tic')
+    nsamples = len(df_maj_vote)
+    print("MTurk voted on %d companies." % nsamples)
+    df_maj_vote.to_csv("evaluators/prnews/MTurk/MTurk_maj_vote.csv", index=False)
+    df_maj_vote= df_maj_vote.set_index(index_key)
+    return df_maj_vote
 
 
 if __name__=="__main__":
     """
     render_mturk_html(df)
     """
+    unused_methods = ['haskey', 'edit_sim_sent']
+    index_key = 'company'
     kws = ['analytics', 'innovation', 'technology']
     prediction_files = [
-        'evaluation/local_topics_eval_predictions.csv',
-        'evaluation/global_topics_eval_predictions.csv',
-        'evaluation/edit_eval_predictions.csv',
-        'evaluation/tte_sent_small_eval_predictions.csv',
-    ]
-    proprediction_files = [None, None, None, None]
-    #proprediction_files = [
-    #    'evaluation/local_topics_acct_eval_predictions.csv',  # 61% MTurk precision
-    #    'evaluation/global_topics_acct_eval_predictions.csv',  # 61% MTurk precision
-    #    'evaluation/edit_acct_eval_predictions.csv',  # 65% MTurk precision
-    #    'evaluation/acct_tte_sent_small_eval_predictions.csv'  # 59% MTurk precision
-    #]
-    prediction_results = {}
-    for pred_file, propred_file in zip(prediction_files, proprediction_files):
-        df = pd.read_csv(pred_file)
-        n_preds = len(df)
-        df = process_predictions_df(df, kws)
-        k = list(df.keys())[0]
-        df[k] = (df[k], propred_file)
-        prediction_results.update(df)
-        print('%s model predictions on %d companies.' % (pred_file, n_preds))
+        #'evaluation/prnews_accounting/local_topics_val_predictions.csv',
+        #'evaluation/prnews_accounting/global_topics_val_predictions.csv',
+        'evaluation/prnews_accounting/edit_val_predictions.csv',
+        'evaluation/prnews_accounting/tte_sent_small_eval_predictions.csv']
 
-    #  If you need to start a new MTurk batch task to collect GT labels.
-    #  render_mturk_html(df)
-    batch_file="./MTurkBatch/Batch_4766827_batch_results.csv"
-    df_vote = append_MTurk_batch_response(batch_file)
-    df_maj_vote = majority_vote(df_vote)
-    df_maj_vote= df_maj_vote.drop_duplicates('tic').set_index('tic')
-    nsamples = len(df_maj_vote)
-    print("MTurk voted on %d companies." % nsamples)
-    df_maj_vote.to_csv("MTurk/MTurk_maj_vote.csv")
+    #df_gt = load_gt(index_key)
+    df_mturk = load_MTurk(index_key)
+    df_predictions = load_predictions_df(prediction_files, index_key)
+    methods = sorted(set([col.split(':')[0] for col in df_predictions.columns]))
 
-    for w in kws:
+    for kw in kws:
         fig, ax = plt.subplots(1, 1)
         i=0
-        for method, (pred_df, propred_file) in prediction_results.items():
-            score_col = ':'.join([method, w])
+        lengs = []
+        for method in methods:
+
+            if method in unused_methods:
+                continue
+            score_col = ':'.join([method, kw])
+            lengs.append(score_col)
             print(' ----------------- Threshold selector for ', score_col, ' ------------------')
-            df_prec_rec = score(pred_df, df_maj_vote, score_col, w, nsamples, propred_file)
+            df_prec_rec = score(df_predictions[score_col], df_mturk[kw])
             _print_df(df_prec_rec)
             ax.plot(df_prec_rec['recall'], df_prec_rec['precision'], '.--', c=colormaps[i])
             i+=1
-        ax.legend(list(prediction_results.keys()), loc='best')
-        ax.set_title('%s:ROC' % w)
+        ax.legend(lengs, loc='best')
+        ax.set_title('%s:ROC' % kw)
         ax.set_ylabel('precision')
         ax.set_xlabel('recall')
         plt.show(block=True)

@@ -1,0 +1,373 @@
+analytics,innovation,technology,company,tic
+1,1,1,abbott,ABT
+0,1,1,abbvie,ABBV
+1,1,1,aercap holdings n.v.,EURX
+1,1,1,aes corp.,AES
+1,1,0,aethlon medical inc.,AEMD
+0,1,0,agree realty corporation,ADC
+1,1,0,air products,ACRN
+1,0,1,alamo group inc.,ALG
+0,1,1,alaska air group,ALK
+0,1,1,alexandria real estate equities inc.,ARE
+1,1,1,ally financial,ALLY
+1,1,1,altair,ALTR
+1,0,1,alteryx inc.,AYX
+0,1,1,ameren missouri,AEE
+1,1,1,american electric power,AEP
+1,1,0,ametek inc.,AME
+0,1,1,amgen,AMGN
+0,1,1,ampio pharmaceuticals inc.,AMAG
+1,1,0,anterix inc.,ATEX
+1,0,1,antero resources corporation,AR
+1,1,0,aon plc,AON
+1,1,0,ardmore shipping corporation,ASC
+1,1,1,arlo technologies inc.,ARLO
+0,0,1,arthur j. gallagher  co.,AJG
+1,1,1,aspen aerogels inc.,ASPN
+0,1,1,astellas pharma inc.,ACST
+0,1,1,atento s.a.,QGOG
+0,1,1,atlas corp.,ATCX
+1,1,0,autoliv,ALV
+0,1,1,autonation inc.,AN
+0,1,0,avanos medical inc.,AVNS
+0,1,1,axalta coating systems ltd.,AXTA
+0,1,1,azure power,AZRE
+1,1,0,ball aerospace,LMIA
+0,1,1,ballard power systems inc.,BLDP
+0,1,1,ballys corporation,BALY
+0,1,1,banco latinoamericano de comercio exterior s.a. bladex,BLX
+0,1,1,bank of america corporation,BAC
+1,1,1,bd becton dickinson and company,BDX
+1,1,0,bed bath  beyond,BBBY
+1,1,1,bell canada,BELM
+1,1,1,benchmark electronics inc.,BHE
+1,1,0,benson hill,BHIL
+0,1,0,berger montague,BGRH
+0,1,1,best inc.,BBY
+1,1,1,bgc partners inc.,BGCP
+0,1,0,big lots inc.,BIG
+0,1,0,biglari holdings inc.,BH
+1,1,1,biohaven pharmaceutical holding company ltd.,BHVN
+1,1,1,black knight inc.,BKI
+0,1,1,blackline,BL
+1,0,1,bmo financial group,AMBC
+0,1,1,boeing,BA
+0,1,0,boston scientific corporation,BSX
+1,1,0,braemar hotels  resorts inc.,BHR
+1,1,1,brainstorm cell therapeutics inc.,BCLI
+1,0,1,brookdale senior living inc.,BKD
+0,1,1,cae inc.,CAE
+1,0,0,caesars entertainment inc.,CZR
+1,1,0,callaway golf company,ELY
+1,0,1,canadian pacific,CP
+1,0,1,canadian solar inc.,CSIQ
+1,1,0,canon u.s.a. inc.,CRNS
+1,1,1,capital one financial corporation,COF
+1,1,1,catchmark timber trust inc.,CTT
+1,1,1,caterpillar inc.,CAT
+1,1,1,cedar realty trust inc.,CDR
+1,0,1,centerpoint energy inc.,CNP
+1,0,1,cgi inc.,GIB
+0,1,1,cheetah mobile,CMCM
+0,1,1,chesapeake energy corporation,CHK
+0,1,1,china natural resources inc.,CHNR
+1,1,0,china yuchai international limited,CYD
+0,1,0,chipotle mexican grill,CMG
+1,1,0,choice hotels international inc.,CHH
+0,1,0,chubb,CB
+1,0,1,cisco systems inc.,CSCO
+1,1,0,citizens inc.,CIA
+1,1,0,clear channel outdoor,CCO
+0,0,1,cms energy,BROG
+0,1,1,cnx resources corporation,CNX
+0,1,1,cohen  steers,CNS
+1,1,0,community healthcare trust inc.,DHC
+0,1,1,conagra brands inc.,CAG
+1,1,0,concord medical services holdings limited,AMEH
+1,1,0,consol energy inc.,CEIX
+1,1,1,continental resources,CLR
+1,0,1,copart inc.,CPRT
+1,1,1,cracker barrel old country store inc.,CBRL
+1,1,1,crescent point energy corp.,CRGY
+0,1,0,crocs inc.,CROX
+1,1,1,crown holdings inc.,CCK
+0,1,1,crown royal,CRWS
+1,1,1,cue health inc.,HLTH
+1,1,1,cunard line,VALU
+1,0,1,cvs health,AXLA
+0,1,1,cvs health corporation,CVS
+1,1,1,dana incorporated,DAN
+1,1,1,daqo new energy corp.,DQ
+1,1,0,darden restaurants inc. general,DRI
+0,1,1,darling ingredients inc.,DAR
+0,1,1,delek logistics,LLGX
+1,1,1,dell technologies,DELL
+1,1,0,delta air lines,DAL
+1,1,0,dhi group inc.,DHX
+0,1,1,dicks sporting goods,DKS
+1,1,1,digital realty,DLR
+1,1,0,dish network corporation,DISH
+1,1,1,docusign inc.,DOCU
+1,0,1,dominos pizza inc.,DPZ
+0,1,1,doordash,DASH
+1,1,1,dorian lpg ltd.,LPG
+1,1,0,dover,DOV
+1,1,0,duke energy,DUK
+1,1,0,dupont,DPMI
+0,1,1,dynavax technologies,DVAX
+0,1,0,eastside distilling inc.,EAST
+1,0,1,edwards lifesciences corporation,EW
+0,1,0,empire state realty trust inc.,ESRT
+0,1,0,energizer holdings inc.,ENR
+0,1,1,enlink midstream llc,ENLC
+1,1,1,enova international inc.,ENVA
+1,1,0,envestnet inc.,ENV
+1,1,0,envista holdings corporation,NVST
+0,1,1,eog resources inc.,EOG
+1,1,1,eqt corporation,EQT
+1,0,0,equifax inc.,EFX
+1,1,0,equinix inc.,EQIX
+1,1,0,erie indemnity company,ERIE
+1,1,1,essa pharma inc,EPIX
+1,1,0,evolent health,EVH
+0,1,0,extra space storage inc.,EXR
+1,1,1,farmer mac,FARM
+1,0,1,fathom events,FTHM
+1,0,0,federal realty investment trust,FRT
+1,1,0,federal signal corporation,FSS
+1,0,0,fidelity national financial inc.,FNF
+1,1,0,financialnewsmedia.com,ACOM
+1,1,0,first financial bankshares inc.,FFIN
+1,1,0,firstenergy corp.,FE
+0,1,0,flagstar bancorp inc.,FBC
+1,1,0,flotek industries inc.,FTK
+1,1,1,foot locker inc.,FL
+1,1,1,future fintech group inc.,FTFT
+0,1,1,g. willi__food international ltd.,WILC
+1,1,0,galmed pharmaceuticals ltd.,GLMD
+0,1,1,gates,GTES
+1,1,0,genpact,G
+0,1,1,genuine parts company,GPC
+0,1,0,ginkgo bioworks,DNA
+1,1,0,glory star new media group holdings limited,GSMG
+0,1,1,godaddy inc.,GDDY
+0,1,1,gogo inc.,GOGO
+0,1,1,gopro inc.,GPRO
+0,1,1,greif inc.,GEF
+0,0,1,gt biopharma inc.,GTBP
+0,0,1,hamilton beach brands holding company,HBB
+0,1,1,hawaiian holdings inc.,HA
+0,1,0,healthcare trust of america inc.,HTA
+1,1,1,healthpeak properties inc.,PEAK
+1,1,0,heidrick  struggles international inc.,HSII
+1,1,0,heritage insurance holdings inc.,HRTG
+0,1,0,heska corporation,HSKA
+1,0,1,hoegh lng partners lp,HMLP
+0,1,1,honeywell,HON
+0,1,1,hormel foods corporation,HRL
+1,1,0,houghton mifflin harcourt,HMHC
+1,0,1,huaneng power international inc.,HNP
+1,1,1,hubspot,HUBS
+1,1,1,huntsman corporation,HUN
+0,1,1,hut 8 mining corp,HUT
+0,1,0,hycroft mining holding corporation,HYMC
+1,1,0,hyster__yale materials handling inc.,HY
+1,1,0,iac,IAC
+0,1,0,illumina inc.,ILMN
+0,1,1,independence contract drilling inc.,ICD
+0,1,1,instructure,INST
+0,1,0,international paper,IP
+0,1,1,invesco ltd.,IVZ
+1,0,0,investors bancorp inc.,ISBC
+0,1,0,ionis pharmaceuticals inc.,IONS
+0,1,1,irsa inversiones y representaciones s.a.,IRS
+1,1,0,jack henry  associates inc.,JKHY
+0,1,1,jazz pharmaceuticals plc,JAZZ
+0,1,1,john hancock investment management,PHCF
+1,1,0,johnson controls international plc,JCI
+0,1,1,kar global,BEEM
+0,1,1,kennametal inc.,KMT
+0,1,1,kenon holdings ltd.,KEN
+1,0,0,keycorp,KEY
+0,1,1,kimbell royalty partners lp,KRP
+1,0,1,kimberly__clark,KMB
+1,1,1,kingsway financial services inc.,KFS
+0,1,1,kore wireless,WIFI
+1,1,0,kraton corporation,KRA
+1,1,0,kyndryl,KD
+0,1,1,lannett company inc.,LCI
+0,1,1,lantern pharma,LTRN
+1,1,1,las vegas sands,LVS
+0,1,1,leggett  platt,LEG
+0,1,1,leidos holdings inc.,LDOS
+1,1,0,lendingclub corporation,LC
+0,1,1,lennox international inc.,LII
+0,1,1,life time inc.,LTH
+1,1,0,lion electric,LEV
+0,1,1,liqtech international inc.,LIQT
+0,1,0,lithia motors inc.,LAD
+0,1,0,live nation entertainment,LYV
+0,0,1,lockheed martin,LMT
+1,1,1,loews corporation,L
+1,1,0,lubys inc.,LUB
+1,1,0,lumentum,LITE
+1,0,1,lyondellbasell industries,LYB
+1,1,0,magnachip semiconductor corporation,CY
+1,1,0,main street capital corporation,MSBK
+0,1,0,mainstreet bancshares inc.,MNSB
+1,0,1,marathon oil corporation,ROCC
+0,1,1,marine products corporation,MPX
+0,1,1,marriott vacations worldwide corporation,VAC
+0,1,0,maxeon solar technologies ltd.,MAXN
+1,1,1,mdu resources group inc.,MDU
+1,1,0,mercury insurance,GSHD
+1,1,1,mettler__toledo international inc.,MTD
+1,1,1,mgic investment corporation,AGNC
+0,1,1,mgm growth properties llc,MGP
+0,1,0,mgm resorts international,MGM
+0,1,1,mi homes inc.,MHO
+1,1,1,micro focus,MFGP
+1,1,1,milestone pharmaceuticals inc.,MIST
+1,0,1,mirati therapeutics inc.,MRTX
+1,1,0,mongodb inc.,MDB
+1,1,0,mplx lp,MPLX
+1,1,1,msa safety,MSA
+1,0,0,msc industrial supply co.,MSM
+0,1,1,mt bank corporation,CSFL
+1,0,1,national grid,NGG
+0,1,1,nelnet inc.,NNI
+0,1,0,neptune wellness solutions inc.,NEPT
+1,1,0,net2phone,NTOP
+0,1,1,nevro corp.,NVRO
+0,1,1,nextera energy inc.,NEE
+0,1,0,nextera energy inc. nextera energy partners lp,NEP
+0,0,1,nielsen,NLSN
+0,1,1,nikola corporation,NKLA
+0,1,1,norfolk southern corporation,NSC
+0,1,0,northwest pipe company,NWPX
+0,1,1,nortonlifelock inc.,NLOK
+1,1,1,novavax inc.,NVAX
+0,1,0,nucor corporation,NUE
+1,0,1,nvr inc.,NVR
+0,1,1,oasis petroleum inc.,OAS
+0,1,1,oge energy corp.,OGE
+0,1,0,old republic international corporation,ORI
+1,1,0,one gas inc.,OGS
+0,1,1,oppenheimer  co. inc.,OPY
+1,1,0,oracle,ORCL
+0,1,1,paypal holdings inc.,PYPL
+0,1,1,pbf logistics lp,PBFX
+0,1,0,peabody,BTU
+1,1,0,pembina pipeline corporation,PBA
+1,1,0,penske automotive group inc.,PAG
+1,0,1,perrigo company plc,PRGO
+0,0,1,pnc financial services group inc.,PNC
+1,0,1,pnm resources inc.,PNM
+0,1,1,ppl corporation,PPL
+1,1,0,prologis inc.,PLD
+0,1,0,prosperity bancshares inc.,PRSP
+1,1,0,prudential financial inc.,PRU
+1,1,1,qualys inc.,QLYS
+1,1,0,qudian inc.,QD
+0,1,0,quest diagnostics,DGX
+1,1,0,quicklogic corporation,QUIK
+1,0,1,realnetworks inc.,RNWK
+1,1,0,realogy holdings corp.,RLGY
+1,1,0,realty income corporation,O
+1,1,0,recon technology ltd.,RCON
+1,0,1,redhill biopharma ltd.,ABVC
+1,1,0,redwood trust inc.,RWT
+0,1,1,regeneron pharmaceuticals inc.,REGN
+0,1,0,remark holdings inc.,MARK
+1,0,1,republic services inc.,RSG
+1,0,1,resideo technologies inc.,REZI
+0,1,1,resolute forest products inc.,RFP
+0,1,1,ritchie bros. auctioneers,RBA
+0,1,1,robert half,RHI
+1,1,0,royal caribbean group,RCL
+0,1,0,rpc inc.,RES
+1,1,0,rush street interactive,RSI
+1,1,1,ryerson holding corporation,RYI
+1,1,0,salesforce,CRM
+1,1,0,sally beauty holdings inc.,SBH
+1,0,1,sap se,VTEC
+0,1,0,saul centers inc.,BFS
+1,1,0,seaworld entertainment inc.,SEAS
+1,1,0,sequans communications,SQNS
+1,1,0,service corporation international,ATNI
+1,1,0,shutterstock inc.,SSTK
+1,1,0,signet jewelers ltd.,SIG
+1,0,1,silicom ltd.,SILC
+0,1,1,sm energy company,SM
+0,1,0,sonim technologies inc.,SONM
+0,1,1,southwest airlines co.,LUV
+1,1,1,southwest gas corporation,OKSB
+1,0,1,southwest gas holdings inc.,SWX
+1,1,1,sp global market intelligence,GMC
+1,1,1,spire inc.,SR
+0,1,0,spirit airlines inc.,SAVE
+1,0,1,spx flow inc.,FLOW
+1,1,0,ssr mining inc.,SSRM
+0,1,1,stag industrial inc.,STAG
+1,1,1,standard  poors,LAB
+0,1,1,standard motor products inc.,SMP
+1,1,0,starboard value lp,SVAC
+1,0,0,starwood property trust inc.,STWD
+1,0,1,stepan company,SCL
+1,1,1,sunoco lp,SUN
+1,1,0,switch inc.,SWCH
+0,1,0,synchrony,SYF
+0,1,1,syndax pharmaceuticals inc.,SNDX
+1,1,0,synopsys inc.,SNPS
+1,1,0,synthetic biologics inc.,ABCL
+1,1,1,tal education group,WAFU
+1,1,0,tanger factory outlet centers inc.,SKT
+1,0,1,team inc.,TISI
+1,1,1,telephone and data systems,TDS
+1,1,1,tenneco inc.,TEN
+0,1,1,tetra technologies inc.,TTI
+0,1,1,the hanover insurance group inc.,THG
+1,1,1,the home depot,HD
+1,1,0,the howard hughes corporation,HHC
+1,0,1,the joint corp.,JYNT
+1,1,1,the sherwin__williams company,SHW
+0,1,0,thermo fisher scientific,TMO
+1,1,1,thomson reuters,TRI
+0,0,1,titan international inc.,TWI
+1,1,1,townsquare media inc.,TSQ
+1,1,0,trecora resources,TREC
+0,1,1,treehouse foods inc.,THS
+1,1,1,trimble,TRMB
+0,1,1,trinet,TNET
+1,1,1,triumph group,TGI
+1,0,1,tronox holdings plc,TROX
+1,1,1,truist financial corporation,TFC
+1,1,0,tupperware brands corporation,ACCO
+1,1,0,twitter inc.,TWTR
+1,0,1,u.s. silica holdings inc.,CHUY
+0,1,0,ultra clean holdings inc.,UCTT
+0,1,1,unisys corporation,UIS
+1,1,1,univar solutions inc.,UNVR
+1,1,0,universal health services inc.,UHS
+0,1,1,vans,VANS
+1,1,0,vectrus inc.,VEC
+1,1,1,veeva systems,VEEV
+0,1,0,venator materials plc,VNTR
+0,1,1,veoneer,VNE
+1,0,0,vermilion energy inc.,VET
+1,0,1,verso corporation,VRS
+0,1,0,viatris inc.,VTRS
+0,1,1,vipshop holdings limited,AGMH
+1,1,0,vista outdoor inc.,VSTO
+0,1,0,vonage,VG
+0,1,0,vulcan materials company,VMC
+1,1,0,washington trust bancorp inc.,WASH
+1,0,1,webster financial corporation,WBS
+1,0,1,west pharmaceutical services inc.,WST
+1,1,1,wheels up,UP
+1,1,1,wideopenwest inc.,WOW
+1,1,0,wolf haldenstein adler freeman  herz llp,LCID
+1,1,1,wyndham hotels  resorts,WH
+1,1,1,xenia hotels  resorts inc.,XHR
+1,1,1,yext inc.,YEXT
+1,1,1,zim integrated shipping services ltd.,ZIM

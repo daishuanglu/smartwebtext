@@ -30,15 +30,12 @@ KTH_FRAME_FEATURE_SEP = ';'
 #KTH_ACTION_HOME = '/home/shuangludai/KTHactions'
 KTH_VIDEO_FILE = '{action}/person{pid}_{action}_{var}_uncomp.avi'
 
-FASTTEXT_HOME = 'ig_fasttext'
-FASTTEXT_TOOL = string_utils.fasttext_toolkits(fasttext_model_home=FASTTEXT_HOME)
+FASTTEXT_HOME = 'fasttext'
 
 
 def prnews_text_preproc(s):
     stopwords = string_utils.load_stopwords()
     s = s.lower()
-    if not FASTTEXT_TOOL.detEN([s])[0]:
-        return ''
     s = [w.strip() for w in s.split(PRNEWS_PARAGRAPH_SEP)]
     for term in PRNEWS_INVALID_KEYTERMS:
         s = list(filter(lambda x: term not in x, s))
@@ -52,7 +49,11 @@ def prnews_text_preproc(s):
 def prnews(
         output_files, split_ratio, vocabs: Dict[str, List[str]] = {}):
 
+    FASTTEXT_TOOL = string_utils.fasttext_toolkits(fasttext_model_home=FASTTEXT_HOME)
+
     def _body(s):
+        if not FASTTEXT_TOOL.detEN([s.lower()])[0]:
+            return ''
         return prnews_text_preproc(s)
 
     def _title(s):

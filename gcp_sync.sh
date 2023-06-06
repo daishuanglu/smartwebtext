@@ -56,8 +56,8 @@ fi
 if [ $1 == $c ]
 then
     echo "update fasttext model ..."
-    scp -r ig_fasttext/*en*100*.zip shuangludai@$IP:/home/shuangludai/$fdir/fasttext
-    scp -r ig_fasttext/lid.176.bin shuangludai@$IP:/home/shuangludai/$fdir/fasttext
+    #scp -r fasttext/*en*100*.bin shuangludai@$IP:/home/shuangludai/$fdir/fasttext
+    scp -r fasttext/lid.176.bin shuangludai@$IP:/home/shuangludai/$fdir/fasttext
 fi
 if [ $1 == $d ]
 then

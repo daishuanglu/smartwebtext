@@ -40,7 +40,7 @@ if __name__=="__main__":
         #'evaluation/global_topics_acct_eval_predictions.csv',  # 61% MTurk precision
         #'evaluation/edit_acct_eval_predictions.csv',  # 65% MTurk precision
         #'evaluation/acct_tte_sent_small_eval_predictions.csv', # 59% MTurk precision
-        'evaluation/acct_chatgpt_eval_predictions.csv'  # 59% MTurk precision
+        'evaluation/prnews_accounting/acct_chatgpt_eval_predictions.csv'  # 59% MTurk precision
     ]
     kws = [
         'innovation',
