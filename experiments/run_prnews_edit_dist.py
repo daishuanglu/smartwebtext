@@ -7,7 +7,7 @@ from utils import ticker_utils
 from preprocessors import pipelines
 
 COMBINED_TEXT_COL = 'Text'
-TEST_DATA_PATH = "data_model/prnews_validation.csv"
+TEST_DATA_PATH = "data_model/prnews_tte_collab_filter_validation.csv"
 MODE_NAME = 'val'
 
 
@@ -16,11 +16,12 @@ def get_kw_edit_sim_dataset(src_df, keywords, comp=None):
     src_df_ = src_df.copy() if comp is None else\
             src_df[src_df['Company'].isin(comp)]
     comp_list=src_df_['Company'].unique().tolist()
+    print('%d companies.' % len(comp_list))
     scores=np.zeros((len(keywords),len(comp_list)))
     sentences = [['' for _ in range(len(comp_list))] for _ in range(len(keywords))]
     haskw=np.zeros((len(comp_list),len(keywords)))
     start_time=time.time()
-    for ii,(t,c) in enumerate(zip(src_df_['Title'], src_df_['Company'])):
+    for ii,(t,c) in enumerate(zip(src_df_['Title']+' '+src_df_['Text'], src_df_['Company'])):
         t=str(t).lower()
         ic=comp_list.index(c)
         haskw[ic,:]=np.logical_or(haskw[ic,:], [kw in t for kw in keywords])

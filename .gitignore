@@ -8,6 +8,8 @@ tmp/
 .cache
 data/
 data_model/
+evaluation/
+lightning_logs/
 fasttext/
 **/__pycache__
 *.ipynb_checkpoints/

@@ -30,13 +30,18 @@ KTH_FRAME_FEATURE_SEP = ';'
 #KTH_ACTION_HOME = '/home/shuangludai/KTHactions'
 KTH_VIDEO_FILE = '{action}/person{pid}_{action}_{var}_uncomp.avi'
 
+FASTTEXT_HOME = 'ig_fasttext'
+FASTTEXT_TOOL = string_utils.fasttext_toolkits(fasttext_model_home=FASTTEXT_HOME)
+
 
 def prnews_text_preproc(s):
     stopwords = string_utils.load_stopwords()
     s = s.lower()
+    if not FASTTEXT_TOOL.detEN([s])[0]:
+        return ''
     s = [w.strip() for w in s.split(PRNEWS_PARAGRAPH_SEP)]
     for term in PRNEWS_INVALID_KEYTERMS:
-        s = list(filter(lambda x: term not in x.lower(), s))
+        s = list(filter(lambda x: term not in x, s))
     s = [string_utils.remove_punct(sp) for sp in s]
     s = list(filter(lambda x: len(x.split()) > PRNEWS_SENTENCE_MIN_WORDS, s))
     s = [string_utils.clean_char(sp) for sp in s]
@@ -52,14 +57,19 @@ def prnews(
 
     def _title(s):
         s = string_utils.get_title_name(s, sep='-').strip()
+        s = s if FASTTEXT_TOOL.detEN([s])[0] else ''
         return s
 
     def _company(s):
         return string_utils.getcompanyname(s, sep='-').strip()
 
     def _text(row):
-        return PRNEWS_PARAGRAPH_SEP.join(
-            [row['Title'].lower(), row['Body'].lower()]).strip()
+        t, b = row['Title'].lower(), row['Body'].lower()
+        if t == '' and b == '':
+            return ''
+        else:
+            return PRNEWS_PARAGRAPH_SEP.join(
+                [row['Title'].lower(), row['Body'].lower()]).strip()
 
     textfile = dataloader.BaseTextFile(
         fpath=PRNEWS_FILEPATTERN, sep=PRNEWS_SEPARATOR,

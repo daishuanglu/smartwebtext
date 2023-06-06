@@ -65,7 +65,7 @@ class BaseTextFile():
         for col_name, fn in self.col_fns:
             s[col_name] = fn(s)
         if not all([s[key].strip() for key in self.must_contain_cols]):
-            print('Skipped line ID=%d. Missing must-contain key values. line=%s', (id, str(s)))
+            print('Skipped line ID=%d. Missing must-contain key values. line=%s' % (id, str(s)))
             return False
         return s
 
