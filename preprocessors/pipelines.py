@@ -50,7 +50,7 @@ def prnews_text_preproc(s):
 
 
 def prnews(
-        output_files, split_ratio, vocabs: Dict[str, List[str]] = None):
+        output_files, split_ratio, vocabs: Dict[str, List[str]] = {}):
 
     def _body(s):
         return prnews_text_preproc(s)
