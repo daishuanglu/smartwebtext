@@ -63,6 +63,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
     def __init__(self,
                  batch_size,
                  learning_rate,
+                 network_type='gan',
                  predictions_fstr=None,
                  predictions_fsep=None,
                  label_colors_json=None):
@@ -86,6 +87,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             for i, d in enumerate(label_colors):
                 self.color_index[d['id']] = i
             self.color_index = self.color_index.long().to(device)
+        self.network_type = network_type
 
     def build_network(self):
         assert NotImplementedError(), 'Need to implement the network architecture.'
@@ -94,6 +96,34 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         assert NotImplementedError(), 'Need to implement the network forward.'
 
     def training_step(self, batch, batch_nb):
+        if self.network_type == 'gan':
+            return self.gan_training_step(batch, batch_nb)
+        else:
+            return self.reg_training_step(batch, batch_nb)
+
+    def gan_training_step(self, batch, batch_nb):
+        optimizer_d, optimizer_g = self.optimizers()
+        # train discriminator
+        # Measure discriminator's ability to classify real from generated samples
+        self.toggle_optimizer(optimizer_d, optimizer_idx=0)
+        #self.set_requires_grad(self.disc, True)  # enable backprop for D
+        outputs, d_loss = self.forward(batch, True, 0)
+        self.log("d_loss", d_loss.item(), prog_bar=True)
+        # self.log_dict({'d_loss': d_loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
+        self.manual_backward(d_loss)
+        optimizer_d.step()
+        optimizer_d.zero_grad()
+        self.untoggle_optimizer(optimizer_d)
+        #self.set_requires_grad(self.disc, False)  # enable backprop for D
+        self.toggle_optimizer(optimizer_g, optimizer_idx=1)
+        outputs, g_loss = self.forward(batch, True, 1)
+        self.log("g_loss", g_loss.item(), prog_bar=True)
+        self.manual_backward(g_loss)
+        optimizer_g.step()
+        optimizer_g.zero_grad()
+        self.untoggle_optimizer(optimizer_g)
+
+    def reg_training_step(self, batch, batch_nb):
         # Train generator
         outputs, log_loss = self.forward(batch, True)
         self.log_dict({'train_loss': log_loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
@@ -317,44 +347,25 @@ class Pix2Pix(SegmentationEngine):
         )
         self.config = config
         self.build_network()
-        self.bce = nn.MSELoss()
+        self.mse = nn.MSELoss()
         self.l1 = nn.L1Loss()
+        self.bce = nn.BCEWithLogitsLoss()
 
     def build_network(self):
         self.gen = Generator(
             self.config['in_channels'],
             features=self.config['gen_features'],
             n_layers=self.config['n_gen_enc'],
-            out_channels=self.config['in_channels']
-        )
+            out_channels=self.config['in_channels'])
+        self.maps = nn.Conv2d(
+            self.config['in_channels'],
+            self.config['out_channels'], kernel_size=(7, 7), padding=(3, 3))
         disc_input_channel = self.config['in_channels'] * 2
         disc_output_channel = self.config['in_channels']
         self.disc = Discriminator(
             disc_input_channel,
             self.config['disc_features'],
             disc_output_channel)
-
-    def training_step(self, batch, batch_nb):
-        optimizer_d, optimizer_g = self.optimizers()
-        # train discriminator
-        # Measure discriminator's ability to classify real from generated samples
-        self.toggle_optimizer(optimizer_d, optimizer_idx=0)
-        #self.set_requires_grad(self.disc, True)  # enable backprop for D
-        outputs, d_loss = self.forward(batch, True, 0)
-        self.log("d_loss", d_loss.item(), prog_bar=True)
-        # self.log_dict({'d_loss': d_loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
-        self.manual_backward(d_loss)
-        optimizer_d.step()
-        optimizer_d.zero_grad()
-        self.untoggle_optimizer(optimizer_d)
-        #self.set_requires_grad(self.disc, False)  # enable backprop for D
-        self.toggle_optimizer(optimizer_g, optimizer_idx=1)
-        outputs, g_loss = self.forward(batch, True, 1)
-        self.log("g_loss", g_loss.item(), prog_bar=True)
-        self.manual_backward(g_loss)
-        optimizer_g.step()
-        optimizer_g.zero_grad()
-        self.untoggle_optimizer(optimizer_g)
 
     def configure_optimizers(self):
         b1, b2 = 0.5, 0.999
@@ -367,60 +378,115 @@ class Pix2Pix(SegmentationEngine):
         x = torch.stack(x, dim=0).to(device)
         x = x.permute(0, 3, 1, 2).float() / 255.0
         y_fake = self.gen(x)
+        y_pred = self.maps(y_fake)
         if compute_loss:
             gt = flatten_list(batch['gt'])
             gt_imgs = [self.label_colors[self.color_index[target.to(device)]] for target in gt]
             targets = torch.stack(gt_imgs, dim=0).float().to(device) / 255.0
-            #targets = self.color_index[targets.long()]
-            #targets = F.one_hot(targets, num_classes=self.config['out_channels'])
             targets = targets.permute(0, 3, 1, 2)
+            gt = torch.stack(gt, dim=0).to(device)
+            gt_index = self.color_index[gt]
+            gt_onehot = F.one_hot(gt_index, num_classes=self.config['out_channels'])
+            gt_onehot = gt_onehot.permute(0, 3, 1, 2).float()
             if optimizer_idx == 0:
                 D_real = self.disc(x, targets)
                 D_fake = self.disc(x, y_fake.detach())
-                D_real_loss = self.bce(D_real, torch.ones_like(D_real))
-                D_fake_loss = self.bce(D_fake, torch.zeros_like(D_fake))
+                D_real_loss = self.mse(D_real, torch.ones_like(D_real))
+                D_fake_loss = self.mse(D_fake, torch.zeros_like(D_fake))
                 D_loss = (D_real_loss + D_fake_loss) / 2
                 return y_fake.permute(0, 2, 3, 1), D_loss
             if optimizer_idx == 1:
                 # generator loss
                 D_fake = self.disc(x, y_fake)
-                G_fake_loss = self.bce(D_fake, torch.ones_like(D_fake))
+                G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
                 L1 = self.l1(y_fake, targets) * self.config['l1_lambda']
-                G_loss = G_fake_loss + L1
+                BCE = self.bce(y_pred, gt_onehot)
+                G_loss = G_fake_loss + L1 + BCE
                 return y_fake.permute(0, 2, 3, 1), G_loss
         else:
             return y_fake.permute(0, 2, 3, 1), None
 
+from thin_plate_spline_motion_model.modules.keypoint_detector import KPDetector
+from thin_plate_spline_motion_model.modules.dense_motion import kp2gaussian
+from thin_plate_spline_motion_model.modules.util import Hourglass
 
-class UNet(SegmentationEngine):
+class SAMKeyPointPix2Pix(SegmentationEngine):
     def __init__(self, config):
-        super(UNet, self).__init__(
+        super(SAMKeyPointPix2Pix, self).__init__(
             config['batch_size'], config['learning_rate'], config.get('label_colors_json', None))
         self.config = config
+        self.mse = nn.MSELoss()
         self.bce = nn.BCEWithLogitsLoss()
         self.l1 = nn.L1Loss()
         self.build_network()
 
     def build_network(self):
-        self.gen = Generator(
-            self.config['in_channels'],
-            features=self.config['gen_features'],
-            n_layers=self.config['n_gen_enc'],
-            out_channels=self.config['in_channels']
-        )
+        in_features = self.config['in_channels'] * (self.config['num_tps']+1) + self.config['num_tps']*5+1
+        self.hourglass = Hourglass(
+            block_expansion=self.config['block_expansion'],
+            in_features=in_features,
+            num_blocks=self.config['num_blocks'],
+            max_features=self.config['max_features'])
+        hourglass_output_size = self.hourglass.out_channels
+        self.gen = nn.Conv2d(
+            hourglass_output_size[-1], self.config['in_channels'], kernel_size=(7, 7), padding=(3, 3))
+        self.maps = nn.Conv2d(
+            self.config['in_channels'], self.config['out_channels'], kernel_size=(7, 7), padding=(3, 3))
+        self.kp_extractor = KPDetector(num_tps=self.config['num_tps'])
 
-    def forward(self, batch, compute_loss=False, **kwargs):
+    def kp_heatmap_repr(self, source_image):
+        kp_source = self.kp_extractor(source_image)
+        spatial_size = source_image.shape[2:]
+        gaussian_source = kp2gaussian(
+            kp_source['fg_kp'], spatial_size=spatial_size, kp_variance=self.kp_variance)
+        heatmap = gaussian_source
+
+        zeros = torch.zeros(heatmap.shape[0], 1, spatial_size[0], spatial_size[1]).type(heatmap.type()).to(
+            heatmap.device)
+        heatmap = torch.cat([zeros, heatmap], dim=1)
+        return heatmap
+
+    def configure_optimizers(self):
+        b1, b2 = 0.5, 0.999
+        opt_g = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
+        opt_d = torch.optim.Adam(self.disc.parameters(), lr=self.lr, betas=(b1, b2))
+        return [opt_d, opt_g], []
+
+    def forward(self, batch, compute_loss=False, optimizer_idx=0):
         x = flatten_list(batch['image'])
         x = torch.stack(x, dim=0).to(device)
-        x = x.permute(0, 3, 1, 2)
-        pred = self.gen(x.float())
+        x = x.permute(0, 3, 1, 2) / 255.0
+        kp_heatmap = self.kp_heatmap_repr(x)
+        x = flatten_list(batch['sam_image'])
+        x = torch.stack(x, dim=0).to(device)
+        x = x.permute(0, 3, 1, 2) / 255.0
+        x = torch.cat([kp_heatmap, x], dim=1)
+        y_hat = self.hourglass(x.float())
+        y_fake = self.gen(y_hat)
+        y_pred = self.maps(y_fake)
         if compute_loss:
             gt = flatten_list(batch['gt'])
-            targets = torch.stack(gt, dim=0).to(device)
-            targets = torch.minimum(torch.tensor(self.config['out_channels'] - 1), targets)
-            targets = F.one_hot(targets, num_classes=self.config['out_channels'])
-            targets = targets.permute(0, 3, 1, 2).float()
-            loss = self.l1(pred, targets) + self.bce(pred, targets)
-            return pred.permute(0, 2, 3, 1), loss
+            gt_imgs = [self.label_colors[self.color_index[target.to(device)]] for target in gt]
+            targets = torch.stack(gt_imgs, dim=0).float().to(device) / 255.0
+            # targets = self.color_index[targets.long()]
+            targets = targets.permute(0, 3, 1, 2)
+            gt = torch.stack(gt, dim=0).to(device)
+            gt_onehot = F.one_hot(gt.long(), num_classes=self.config['out_channels'])
+            gt_onehot = gt_onehot.permute(0, 3, 1, 2)
+            if optimizer_idx == 0:
+                D_real = self.disc(x, targets)
+                D_fake = self.disc(x, y_fake.detach())
+                D_real_loss = self.mse(D_real, torch.ones_like(D_real))
+                D_fake_loss = self.mse(D_fake, torch.zeros_like(D_fake))
+                D_loss = (D_real_loss + D_fake_loss) / 2
+                return y_fake.permute(0, 2, 3, 1), D_loss
+            if optimizer_idx == 1:
+                # generator loss
+                D_fake = self.disc(x, y_fake)
+                G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
+                L1 = self.l1(y_fake, targets) * self.config['l1_lambda']
+                BCE = self.bce(y_pred, gt_onehot)
+                G_loss = G_fake_loss + L1 + BCE
+                return y_fake.permute(0, 2, 3, 1), G_loss
         else:
-            return pred, None
+            return y_fake.permute(0, 2, 3, 1), None

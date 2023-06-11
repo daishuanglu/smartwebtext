@@ -3,12 +3,17 @@ train_val_ratio: [0.95, 0.05]
 skip_prep_data: True
 dataset_dir: 'D:/video_datasets/A2D'
 label_colors_json: 'D:/video_datasets/A2D/label_colors.json'
-sam_model_dir: 'D:/ai_models/segment_anything'
-sam_model_type: 'vit_b'
 val_prediction_fstr: 'val_predictions/{vid}/{fids}.jpg'
 #Model
 skip_training: False
 input_size: [320, 768]
+#dense keypoint parameters
+# Number of features mutliplier
+block_expansion: 64
+# Maximum allowed number of features
+max_features: 1024
+# Number of block in Unet.
+num_blocks: 5
 # pix2pix settings
 patch_size: [256, 256]
 gen_features: 64

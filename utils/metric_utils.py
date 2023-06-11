@@ -22,6 +22,13 @@ def vec2mat_cos_sim(vec, mat):
     #print(np.abs(np.linalg.norm(mat,axis=0)-mat_norm).max())
     return out1
 
+# Function to compute the Intersection over Union (IoU) between two regions
+def calculate_iou(region_a, region_b):
+    intersection = np.logical_and(region_a, region_b)
+    union = np.logical_or(region_a, region_b)
+    iou = np.sum(intersection) / np.sum(union)
+    return iou
+
 
 if __name__ == '__main__':
     # Example input arrays

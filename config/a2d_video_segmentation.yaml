@@ -5,7 +5,7 @@ dataset_dir: 'D:/video_datasets/A2D'
 label_colors_json: 'D:/video_datasets/A2D/label_colors.json'
 val_prediction_fstr: 'val_predictions/{vid}/{fids}.jpg'
 #Model
-skip_training: True
+skip_training: False
 input_size: [320, 768]
 # pix2pix settings
 patch_size: [256, 256]

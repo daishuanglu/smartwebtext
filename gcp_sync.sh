@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eux
 fdir=${2:-"smartwebtext"}
-IP="35.185.212.101"
+IP="34.83.192.252"
 a="code"
 b="prnews"
 c="fasttext"

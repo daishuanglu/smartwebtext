@@ -18,10 +18,14 @@ if __name__ == '__main__':
         help='Input video clips path patterns')
     parser.add_argument(
         '--output_clips_dir', required=True, help='Output video clips directory')
+    parser.add_argument(
+        '--start_from', default=0, type=int, help='Start from the i-th file.')
     args = parser.parse_args()
     client = sam_client.SAMClient(model_dir=args.sam_model_dir, model_type=args.sam_model_type)
     clips_paths = glob.glob(args.clips_path)
     for i, video_path in enumerate(clips_paths):
+        if i < args.start_from:
+            continue
         print('%d/%d, processing %s ' % (i, len(clips_paths), video_path))
         output_fname = os.path.basename(video_path)
         segmented_video_path = os.path.join(args.output_clips_dir, output_fname)

@@ -84,6 +84,18 @@ def assign_closest_color_code(segmentation_colors: np.array, np_img: np.array):
     return segmented_image_data
 
 
+def color_map_to_region_id_map(color_map):
+    # Flatten the color map to a 2D array
+    flattened_map = color_map.reshape(-1, 3)
+    # Get unique colors and their indices
+    unique_colors, color_indices = np.unique(flattened_map, axis=0, return_inverse=True)
+    # Create a lookup table to map colors to region IDs
+    lookup_table = np.arange(len(unique_colors))
+    # Reshape the color indices back to the original shape
+    region_id_map = lookup_table[color_indices].reshape(color_map.shape[:2])
+    return region_id_map
+
+
 if __name__=='__main__':
     # Example 1
     image_size1 = [312, 312]
@@ -126,3 +138,10 @@ if __name__=='__main__':
 
     # Display the result
     print("Reconstructed image shape:", reconstructed_image.shape)
+
+    color_map = (np.random.rand(10,10)>0.5)*255
+    color_map = np.stack([color_map, color_map, color_map])
+    color_map = np.transpose(color_map, (1, 2, 0))
+    print(color_map)
+    region_ids = color_map_to_region_id_map(color_map)
+    print(region_ids)
