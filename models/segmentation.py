@@ -40,18 +40,6 @@ def flatten_list(nested_list):
     return flattened_list
 
 
-class BCEWithLogitsLoss(nn.Module):
-    def __init__(self):
-        super(BCEWithLogitsLoss, self).__init__()
-        self.loss = nn.BCEWithLogitsLoss()
-
-    def forward(self, output, target):
-        output = output.squeeze()
-        target = target.squeeze()
-        loss = self.loss(output, target)
-        return loss
-
-
 def generate_color_segments(probs2D, label_colors):
     classId = probs2D.argmax(axis=-1)
     # Use gather to assign colors to each pixel location
@@ -70,7 +58,6 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         super(SegmentationEngine, self).__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
-        self.criterion = BCEWithLogitsLoss()
         self.bsize = batch_size
         self.lr = learning_rate
         print('Initializing Pix2pix image segment color generator.')
@@ -192,7 +179,8 @@ class DiscCNNBlock(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(
                 in_channels, out_channels, kernel_size=4, stride=stride, padding=1, bias=False, padding_mode="reflect"),
-            nn.BatchNorm2d(out_channels),
+            #nn.BatchNorm2d(out_channels),
+            nn.InstanceNorm2d(out_channels, affine=True),
             nn.LeakyReLU(0.2)
         )
 
@@ -235,7 +223,8 @@ class GenCNNBlock(nn.Module):
                 in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False, padding_mode="reflect")
             if down
             else nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
+            #nn.BatchNorm2d(out_channels),
+            nn.InstanceNorm2d(out_channels, affine=True),
             nn.LeakyReLU(0.2) if act == 'leaky' else nn.ReLU()
         )
         self.use_dropout= use_dropout
@@ -296,44 +285,8 @@ class Generator(nn.Module):
         return x
 
 
-class DoubleConv(nn.Module):
-    def __init__(self, in_channels, out_channels, reduce_dim=False):
-        super(DoubleConv, self).__init__()
-        stride = 2 if reduce_dim else 1
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=stride, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True))
-
-    def forward(self, x):
-        x = self.conv(x)
-        return x
-
-
-class Up(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(Up, self).__init__()
-        # If using bilinear interpolation, use transposed convolution to
-        # upsample the feature map. Otherwise, use nearest-neighbor interpolation.
-        self.up = nn.ConvTranspose2d(in_channels, in_channels, kernel_size=2, stride=2)
-        self.conv = DoubleConv(in_channels *2, out_channels)
-
-    def forward(self, x1, x2=None):
-        x1 = self.up(x1)
-        if x2 is not None:
-            # Concatenate x1 and x2 along the channel dimension
-            diff_h = x2.size()[2] - x1.size()[2]
-            diff_w = x2.size()[3] - x1.size()[3]
-            x1 = F.pad(x1, (diff_w // 2, diff_w - diff_w // 2,
-                            diff_h // 2, diff_h - diff_h // 2))
-            x = torch.cat([x2, x1], dim=1)
-        else:
-            x = x1
-        x = self.conv(x)
-        return x
+from thin_plate_spline_motion_model.modules.keypoint_detector import KPDetector
+from thin_plate_spline_motion_model.modules.dense_motion import kp2gaussian
 
 
 class Pix2Pix(SegmentationEngine):
@@ -352,20 +305,37 @@ class Pix2Pix(SegmentationEngine):
         self.bce = nn.BCEWithLogitsLoss()
 
     def build_network(self):
+        gen_in_channels = self.config['in_channels']
+        if self.config['use_fg_kp']:
+            gen_in_channels += self.config['num_tps']*5 + 1
+            self.kp_extractor = KPDetector(num_tps=self.config['num_tps'])
+            self.fg_kp_maps = nn.Conv2d(
+                self.config['num_tps'] * 5 + 1, 1, kernel_size=(7, 7), padding=(3, 3))
         self.gen = Generator(
-            self.config['in_channels'],
+            gen_in_channels,
             features=self.config['gen_features'],
             n_layers=self.config['n_gen_enc'],
             out_channels=self.config['in_channels'])
-        self.maps = nn.Conv2d(
-            self.config['in_channels'],
-            self.config['out_channels'], kernel_size=(7, 7), padding=(3, 3))
+        if self.config.get('use_annotation', True):
+            self.annotation_maps = nn.Conv2d(
+                self.config['in_channels'],
+                self.config['out_channels'], kernel_size=(7, 7), padding=(3, 3))
         disc_input_channel = self.config['in_channels'] * 2
         disc_output_channel = self.config['in_channels']
         self.disc = Discriminator(
             disc_input_channel,
             self.config['disc_features'],
             disc_output_channel)
+
+    def kp_heatmap_repr(self, source_image, kp_source):
+        spatial_size = source_image.shape[2:]
+        gaussian_source = kp2gaussian(
+            kp_source['fg_kp'], spatial_size=spatial_size, kp_variance=self.config['kp_variance'])
+        heatmap = gaussian_source
+        zeros = torch.zeros(heatmap.shape[0], 1, spatial_size[0], spatial_size[1]).type(heatmap.type()).to(
+            heatmap.device)
+        heatmap = torch.cat([zeros, heatmap], dim=1)
+        return heatmap
 
     def configure_optimizers(self):
         b1, b2 = 0.5, 0.999
@@ -377,8 +347,12 @@ class Pix2Pix(SegmentationEngine):
         x = flatten_list(batch['image'])
         x = torch.stack(x, dim=0).to(device)
         x = x.permute(0, 3, 1, 2).float() / 255.0
-        y_fake = self.gen(x)
-        y_pred = self.maps(y_fake)
+        if self.config['use_fg_kp']:
+            fg_kp = self.kp_extractor(x)
+            fg_kp_heatmap = self.kp_heatmap_repr(x, fg_kp)
+            y_fake = self.gen(torch.cat([fg_kp_heatmap, x], dim=1))
+        else:
+            y_fake = self.gen(x, dim=1)
         if compute_loss:
             gt = flatten_list(batch['gt'])
             gt_imgs = [self.label_colors[self.color_index[target.to(device)]] for target in gt]
@@ -400,93 +374,17 @@ class Pix2Pix(SegmentationEngine):
                 D_fake = self.disc(x, y_fake)
                 G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
                 L1 = self.l1(y_fake, targets) * self.config['l1_lambda']
-                BCE = self.bce(y_pred, gt_onehot)
-                G_loss = G_fake_loss + L1 + BCE
+                G_loss = G_fake_loss + L1
+                if self.config.get('use_annotation', True):
+                    y_pred = self.annotation_maps(y_fake)
+                    BCE = self.bce(y_pred, gt_onehot)
+                    G_loss += BCE * self.config['l1_lambda']
+                if self.config['use_fg_kp']:
+                    bg_index = self.config['bg_label_index']
+                    fg_label = 1- gt_onehot[:, bg_index:bg_index+1, :, :]
+                    fg_heat_map = self.fg_kp_maps(fg_kp_heatmap)
+                    G_loss += self.bce(fg_heat_map, fg_label)
                 return y_fake.permute(0, 2, 3, 1), G_loss
         else:
             return y_fake.permute(0, 2, 3, 1), None
 
-from thin_plate_spline_motion_model.modules.keypoint_detector import KPDetector
-from thin_plate_spline_motion_model.modules.dense_motion import kp2gaussian
-from thin_plate_spline_motion_model.modules.util import Hourglass
-
-class SAMKeyPointPix2Pix(SegmentationEngine):
-    def __init__(self, config):
-        super(SAMKeyPointPix2Pix, self).__init__(
-            config['batch_size'], config['learning_rate'], config.get('label_colors_json', None))
-        self.config = config
-        self.mse = nn.MSELoss()
-        self.bce = nn.BCEWithLogitsLoss()
-        self.l1 = nn.L1Loss()
-        self.build_network()
-
-    def build_network(self):
-        in_features = self.config['in_channels'] * (self.config['num_tps']+1) + self.config['num_tps']*5+1
-        self.hourglass = Hourglass(
-            block_expansion=self.config['block_expansion'],
-            in_features=in_features,
-            num_blocks=self.config['num_blocks'],
-            max_features=self.config['max_features'])
-        hourglass_output_size = self.hourglass.out_channels
-        self.gen = nn.Conv2d(
-            hourglass_output_size[-1], self.config['in_channels'], kernel_size=(7, 7), padding=(3, 3))
-        self.maps = nn.Conv2d(
-            self.config['in_channels'], self.config['out_channels'], kernel_size=(7, 7), padding=(3, 3))
-        self.kp_extractor = KPDetector(num_tps=self.config['num_tps'])
-
-    def kp_heatmap_repr(self, source_image):
-        kp_source = self.kp_extractor(source_image)
-        spatial_size = source_image.shape[2:]
-        gaussian_source = kp2gaussian(
-            kp_source['fg_kp'], spatial_size=spatial_size, kp_variance=self.kp_variance)
-        heatmap = gaussian_source
-
-        zeros = torch.zeros(heatmap.shape[0], 1, spatial_size[0], spatial_size[1]).type(heatmap.type()).to(
-            heatmap.device)
-        heatmap = torch.cat([zeros, heatmap], dim=1)
-        return heatmap
-
-    def configure_optimizers(self):
-        b1, b2 = 0.5, 0.999
-        opt_g = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
-        opt_d = torch.optim.Adam(self.disc.parameters(), lr=self.lr, betas=(b1, b2))
-        return [opt_d, opt_g], []
-
-    def forward(self, batch, compute_loss=False, optimizer_idx=0):
-        x = flatten_list(batch['image'])
-        x = torch.stack(x, dim=0).to(device)
-        x = x.permute(0, 3, 1, 2) / 255.0
-        kp_heatmap = self.kp_heatmap_repr(x)
-        x = flatten_list(batch['sam_image'])
-        x = torch.stack(x, dim=0).to(device)
-        x = x.permute(0, 3, 1, 2) / 255.0
-        x = torch.cat([kp_heatmap, x], dim=1)
-        y_hat = self.hourglass(x.float())
-        y_fake = self.gen(y_hat)
-        y_pred = self.maps(y_fake)
-        if compute_loss:
-            gt = flatten_list(batch['gt'])
-            gt_imgs = [self.label_colors[self.color_index[target.to(device)]] for target in gt]
-            targets = torch.stack(gt_imgs, dim=0).float().to(device) / 255.0
-            # targets = self.color_index[targets.long()]
-            targets = targets.permute(0, 3, 1, 2)
-            gt = torch.stack(gt, dim=0).to(device)
-            gt_onehot = F.one_hot(gt.long(), num_classes=self.config['out_channels'])
-            gt_onehot = gt_onehot.permute(0, 3, 1, 2)
-            if optimizer_idx == 0:
-                D_real = self.disc(x, targets)
-                D_fake = self.disc(x, y_fake.detach())
-                D_real_loss = self.mse(D_real, torch.ones_like(D_real))
-                D_fake_loss = self.mse(D_fake, torch.zeros_like(D_fake))
-                D_loss = (D_real_loss + D_fake_loss) / 2
-                return y_fake.permute(0, 2, 3, 1), D_loss
-            if optimizer_idx == 1:
-                # generator loss
-                D_fake = self.disc(x, y_fake)
-                G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
-                L1 = self.l1(y_fake, targets) * self.config['l1_lambda']
-                BCE = self.bce(y_pred, gt_onehot)
-                G_loss = G_fake_loss + L1 + BCE
-                return y_fake.permute(0, 2, 3, 1), G_loss
-        else:
-            return y_fake.permute(0, 2, 3, 1), None

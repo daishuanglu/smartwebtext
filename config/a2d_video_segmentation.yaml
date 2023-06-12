@@ -14,6 +14,11 @@ n_gen_enc: 6
 disc_features: [64,128, 256, 512]
 in_channels: 3
 l1_lambda: 100
+use_annotation: True
+use_fg_kp: True
+num_tps: 10
+kp_variance: 0.01
+bg_label_index: 0
 # end of pix2pix settings
 out_channels: 64 #total 64 action-actor classes in A2D dataset
 features: [64, 128, 256, 512]

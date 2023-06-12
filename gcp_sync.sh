@@ -42,6 +42,7 @@ then
   #scp -r evaluation shuangludai@$IP:/home/shuangludai/$fdir
   scp -r professional shuangludai@$IP:/home/shuangludai/$fdir
   scp -r tools shuangludai@$IP:/home/shuangludai/$fdir
+  scp -r thin_plate_spline_motion_model shuangludai@$IP:/home/shuangludai/$fdir
   scp env_setup.sh shuangludai@$IP:/home/shuangludai/$fdir
 fi
 if [ $1 == $b ]
