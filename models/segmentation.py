@@ -352,7 +352,7 @@ class Pix2Pix(SegmentationEngine):
             fg_kp_heatmap = self.kp_heatmap_repr(x, fg_kp)
             y_fake = self.gen(torch.cat([fg_kp_heatmap, x], dim=1))
         else:
-            y_fake = self.gen(x, dim=1)
+            y_fake = self.gen(x)
         if compute_loss:
             gt = flatten_list(batch['gt'])
             gt_imgs = [self.label_colors[self.color_index[target.to(device)]] for target in gt]
