@@ -15,7 +15,7 @@ disc_features: [64,128, 256, 512]
 in_channels: 3
 l1_lambda: 100
 bce_lambda: 100
-use_annotation: True
+use_annotation: False
 use_fg_kp: False
 num_tps: 10
 kp_variance: 0.01

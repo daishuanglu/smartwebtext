@@ -312,7 +312,7 @@ class Pix2Pix(SegmentationEngine):
             self.fg_kp_maps = nn.Conv2d(
                 self.config['num_tps'] * 5 + 1, 1, kernel_size=(7, 7), padding=(3, 3))
         gen_out_channels = self.config['in_channels']
-        if self.config.get('use_annotation', True):
+        if self.config.get('use_annotation', False):
             gen_out_channels += self.config['out_channels']
         self.gen = Generator(
             gen_in_channels,
