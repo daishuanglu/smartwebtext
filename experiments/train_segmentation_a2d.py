@@ -113,7 +113,7 @@ def main():
     latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name'])
     os.makedirs(model_eval_dir, exist_ok=True)
     print("generate evaluation results. ")
-    model = train_utils.load(model_obj, latest_ckpt_path)
+    model = train_utils.load(model_obj, latest_ckpt_path).to(train_utils.device)
     test_meta_path = pipelines.A2D_IMAGE_SPLIT_CSV.format(root=config['dataset_dir'], split='test')
     df_test_meta = pd.read_csv(
         test_meta_path, dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
