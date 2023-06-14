@@ -311,18 +311,18 @@ class Pix2Pix(SegmentationEngine):
             self.kp_extractor = KPDetector(num_tps=self.config['num_tps'])
             self.fg_kp_maps = nn.Conv2d(
                 self.config['num_tps'] * 5 + 1, 1, kernel_size=(7, 7), padding=(3, 3))
-        #gen_out_channels = self.config['in_channels']
-        #if self.config.get('use_annotation', True):
-        #    gen_out_channels += self.config['out_channels']
+        gen_out_channels = self.config['in_channels']
+        if self.config.get('use_annotation', True):
+            gen_out_channels += self.config['out_channels']
         self.gen = Generator(
             gen_in_channels,
             features=self.config['gen_features'],
             n_layers=self.config['n_gen_enc'],
-            out_channels=self.config['in_channels'])
-        if self.config.get('use_annotation', True):
-            self.annotation_maps = nn.Conv2d(
-                self.config['in_channels'],
-                self.config['out_channels'], kernel_size=(7, 7), padding=(3, 3))
+            out_channels=gen_out_channels)
+        #if self.config.get('use_annotation', True):
+        #    self.annotation_maps = nn.Conv2d(
+        #        self.config['in_channels'],
+        #        self.config['out_channels'], kernel_size=(7, 7), padding=(3, 3))
         disc_input_channel = self.config['in_channels'] * 2
         disc_output_channel = self.config['in_channels']
         self.disc = Discriminator(
@@ -356,6 +356,9 @@ class Pix2Pix(SegmentationEngine):
             y_fake = self.gen(torch.cat([fg_kp_heatmap, x], dim=1))
         else:
             y_fake = self.gen(x)
+        if self.config.get('use_annotation', False):
+            y_pred = y_fake[:, self.config['in_channels']:, :, :]
+            y_fake = y_fake[:, :self.config['in_channels'], :, :]
         if compute_loss:
             gt = flatten_list(batch['gt'])
             gt_imgs = [self.label_colors[self.color_index[target.to(device)]] for target in gt]
@@ -379,7 +382,7 @@ class Pix2Pix(SegmentationEngine):
                 L1 = self.l1(y_fake, targets) * self.config['l1_lambda']
                 G_loss = G_fake_loss + L1
                 if self.config.get('use_annotation', True):
-                    y_pred = self.annotation_maps(y_fake)
+                    #y_pred = self.annotation_maps(y_fake)
                     BCE = self.bce(y_pred, gt_onehot)
                     G_loss += BCE * self.config['bce_lambda']
                 if self.config['use_fg_kp']:
