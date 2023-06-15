@@ -140,12 +140,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             for patch_coords, save_path in zip(sum(batch['patch_coords'], []), predictions_paths):
                 patch_segments = []
                 for i in range(len(patch_coords)):
-                    #if self.classifier:
-                    #    classId = outputs[n].argmax(axis=-1)
-                    # Use gather to assign colors to each pixel location
-                    #    patch_segment = self.label_colors[classId].detach()
-                    #else:
-                    patch_segment = outputs[n].detach() * 255.0
+                    patch_segment = outputs[n].detach() * 255
                     patch_segments.append(patch_segment.cpu().numpy())
                     n += 1
                 color_segments = image_utils.patches_to_image(patch_segments, patch_coords)
@@ -164,8 +159,8 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             patches, patch_coords = image_utils.image_to_patches(
                 img, self.config['patch_size'])
             x, _ = self({'image': [torch.from_numpy(p) for p in patches]})
-            x = x.detach() * 255.0
-            patch_segments = [p.cpu().numpy() for p in x]
+            x = x.detach()
+            patch_segments = [p.cpu().numpy() * 255 for p in x]
             segment = image_utils.patches_to_image(patch_segments, patch_coords)
             #segment = image_utils.assign_closest_color_code(
             #    self.label_colors.detach().numpy(), segment)
@@ -179,8 +174,8 @@ class DiscCNNBlock(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(
                 in_channels, out_channels, kernel_size=4, stride=stride, padding=1, bias=False, padding_mode="reflect"),
-            #nn.BatchNorm2d(out_channels),
-            nn.InstanceNorm2d(out_channels, affine=True),
+            nn.BatchNorm2d(out_channels),
+            #nn.InstanceNorm2d(out_channels, affine=True),
             nn.LeakyReLU(0.2)
         )
 
@@ -223,8 +218,10 @@ class GenCNNBlock(nn.Module):
                 in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False, padding_mode="reflect")
             if down
             else nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False),
-            #nn.BatchNorm2d(out_channels),
-            nn.InstanceNorm2d(out_channels, affine=True),
+            nn.BatchNorm2d(out_channels),
+            # For some reason the InstanceNorm2d not working. However most of the pix2pix SOTA work use Instance
+            # Norm instead of batchNorm here. Probably better with ResNetGenBlock not Unet.
+            #nn.InstanceNorm2d(out_channels, affine=True),
             nn.LeakyReLU(0.2) if act == 'leaky' else nn.ReLU()
         )
         self.use_dropout= use_dropout
@@ -312,7 +309,7 @@ class Pix2Pix(SegmentationEngine):
             self.fg_kp_maps = nn.Conv2d(
                 self.config['num_tps'] * 5 + 1, 1, kernel_size=(7, 7), padding=(3, 3))
         gen_out_channels = self.config['in_channels']
-        if self.config.get('use_annotation', True):
+        if self.config.get('use_annotation', False):
             gen_out_channels += self.config['out_channels']
         self.gen = Generator(
             gen_in_channels,
@@ -381,7 +378,7 @@ class Pix2Pix(SegmentationEngine):
                 G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
                 L1 = self.l1(y_fake, targets) * self.config['l1_lambda']
                 G_loss = G_fake_loss + L1
-                if self.config.get('use_annotation', True):
+                if self.config.get('use_annotation', False):
                     #y_pred = self.annotation_maps(y_fake)
                     BCE = self.bce(y_pred, gt_onehot)
                     G_loss += BCE * self.config['bce_lambda']
