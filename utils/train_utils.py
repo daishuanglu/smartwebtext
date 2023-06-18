@@ -85,8 +85,7 @@ def training_pipeline(
         accelerator = accelerator,
         devices = num_devices,
         enable_checkpointing = True, # because we always have checkpoint callback
-        callbacks=[checkpoint_callback]
-    )
+        callbacks=[checkpoint_callback])
     #print(model)
     #trainer.tune(model)
     #print("monitor metric before: ", trainer.callback_metrics[monitor].item())

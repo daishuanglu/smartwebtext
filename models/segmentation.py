@@ -133,39 +133,29 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         return prediction_file_paths
 
     def validation_step(self, batch, batch_nb, optimizer_idx=1):
-        outputs, loss = self.forward(batch, compute_loss=True, optimizer_idx=optimizer_idx)
+        outputs, loss = self(batch, compute_loss=True, optimizer_idx=optimizer_idx)
+        loss = loss.item()
         if self.predictions_fstr is not None:
             predictions_paths = self.get_prediction_path(batch)
-            n = 0
-            for patch_coords, save_path in zip(sum(batch['patch_coords'], []), predictions_paths):
-                patch_segments = []
-                for i in range(len(patch_coords)):
-                    patch_segment = outputs[n].detach() * 255
-                    patch_segments.append(patch_segment.cpu().numpy())
-                    n += 1
-                color_segments = image_utils.patches_to_image(patch_segments, patch_coords)
+            for output, save_path in zip(outputs, predictions_paths):
+                color_segments = ((output+1)/2 * 255).long().permute(1, 2, 0).detach().cpu().numpy()
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                PilImage.fromarray(color_segments).save(save_path)
-        self.log_dict({'val_loss': loss.item()}, batch_size=self.bsize, on_step=True, prog_bar=True)
-        return {'loss': loss.item()}
+                PilImage.fromarray(color_segments.astype('uint8')).save(save_path)
+        self.log_dict({'val_loss': loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
+        return {'loss': loss}
+
+    def validation_epoch_end(self, *args, **kwargs):
+        self.train()
+        torch.cuda.empty_cache()
 
     def configure_optimizers(self):
         return [torch.optim.AdamW(params=self.parameters(), lr=self.lr)], []
 
     def segments(self, list_of_images: List[np.array]):
         self.eval()
-        segments = []
-        for img in list_of_images:
-            patches, patch_coords = image_utils.image_to_patches(
-                img, self.config['patch_size'])
-            x, _ = self({'image': [torch.from_numpy(p) for p in patches]})
-            x = x.detach()
-            patch_segments = [p.cpu().numpy() * 255 for p in x]
-            segment = image_utils.patches_to_image(patch_segments, patch_coords)
-            #segment = image_utils.assign_closest_color_code(
-            #    self.label_colors.detach().numpy(), segment)
-            segments.append(segment)
-        return segments
+        outputs, _ = self({'frames': [torch.from_numpy(img) for img in list_of_images]})
+        segments = [((output+1)/2*255).long().permute(1, 2, 0).detach().numpy() for output in outputs]
+        return segments.astype('uint8')
 
 
 class DiscCNNBlock(nn.Module):
@@ -306,8 +296,8 @@ class Pix2Pix(SegmentationEngine):
         if self.config['use_fg_kp']:
             gen_in_channels += self.config['num_tps']*5 + 1
             self.kp_extractor = KPDetector(num_tps=self.config['num_tps'])
-            self.fg_kp_maps = nn.Conv2d(
-                self.config['num_tps'] * 5 + 1, 1, kernel_size=(7, 7), padding=(3, 3))
+            #self.fg_kp_maps = nn.Conv2d(
+            #    self.config['num_tps'] * 5 + 1, 1, kernel_size=(7, 7), padding=(3, 3))
         gen_out_channels = self.config['in_channels']
         if self.config.get('use_annotation', False):
             gen_out_channels += self.config['out_channels']
@@ -344,50 +334,57 @@ class Pix2Pix(SegmentationEngine):
         return [opt_d, opt_g], []
 
     def forward(self, batch, compute_loss=False, optimizer_idx=0):
-        x = flatten_list(batch['image'])
-        x = torch.stack(x, dim=0).to(device)
-        x = x.permute(0, 3, 1, 2).float() / 255.0
+        x = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
+        x_patches, x_coords = image_utils.image_tensors_to_patches(x, self.config['patch_size'])
+        x_patches = x_patches.to(device).float()
         if self.config['use_fg_kp']:
-            fg_kp = self.kp_extractor(x)
-            fg_kp_heatmap = self.kp_heatmap_repr(x, fg_kp)
-            y_fake = self.gen(torch.cat([fg_kp_heatmap, x], dim=1))
+            fg_kp = self.kp_extractor(x_patches)
+            fg_kp_heatmap = self.kp_heatmap_repr(x_patches, fg_kp)
+            y_fake = self.gen(torch.cat([fg_kp_heatmap, x_patches], dim=1))
         else:
-            y_fake = self.gen(x)
+            y_fake = self.gen(x_patches)
         if self.config.get('use_annotation', False):
-            y_pred = y_fake[:, self.config['in_channels']:, :, :]
+            y_preds = y_fake[:, self.config['in_channels']:, :, :]
             y_fake = y_fake[:, :self.config['in_channels'], :, :]
+            y_preds = image_utils.patches_to_image_tensors(y_preds, x_coords)
+        y_fake = image_utils.patches_to_image_tensors(y_fake, x_coords)
         if compute_loss:
-            gt = flatten_list(batch['gt'])
-            gt_imgs = [self.label_colors[self.color_index[target.to(device)]] for target in gt]
-            targets = torch.stack(gt_imgs, dim=0).float().to(device) / 255.0
-            targets = targets.permute(0, 3, 1, 2)
-            gt = torch.stack(gt, dim=0).to(device)
-            gt_index = self.color_index[gt]
-            gt_onehot = F.one_hot(gt_index, num_classes=self.config['out_channels'])
-            gt_onehot = gt_onehot.permute(0, 3, 1, 2).float()
+            gts =  flatten_list(batch['gt_frames'])
+            gt_imgs = [self.label_colors[self.color_index[gt.to(device)]] for gt in gts]
+            gt_imgs = [gt_img.permute(2,0,1).float()/255 for gt_img in gt_imgs]
+            gt_index = [self.color_index[gt.to(device)] for gt in gts]
+            gt_onehot = [F.one_hot(
+                gt_idx, num_classes=self.config['out_channels']) for gt_idx in gt_index]
+            gt_onehot = [_gt.permute(2, 0, 1).float() for _gt in gt_onehot]
             if optimizer_idx == 0:
-                D_real = self.disc(x, targets)
-                D_fake = self.disc(x, y_fake.detach())
-                D_real_loss = self.mse(D_real, torch.ones_like(D_real))
-                D_fake_loss = self.mse(D_fake, torch.zeros_like(D_fake))
-                D_loss = (D_real_loss + D_fake_loss) / 2
-                return y_fake.permute(0, 2, 3, 1), D_loss
+                D_loss = 0
+                for i in range(self.config['batch_size']):
+                    x[i] = x[i].to(device)
+                    D_real = self.disc(x[i].unsqueeze(0), gt_imgs[i].unsqueeze(0))
+                    D_fake = self.disc(x[i].unsqueeze(0), y_fake[i].detach().unsqueeze(0))
+                    D_real_loss = self.mse(D_real, torch.ones_like(D_real))
+                    D_fake_loss = self.mse(D_fake, torch.zeros_like(D_fake))
+                    D_loss += (D_real_loss + D_fake_loss) / 2
+                D_loss /= self.config['batch_size']
+                return y_fake, D_loss
             if optimizer_idx == 1:
                 # generator loss
-                D_fake = self.disc(x, y_fake)
-                G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
-                L1 = self.l1(y_fake, targets) * self.config['l1_lambda']
-                G_loss = G_fake_loss + L1
-                if self.config.get('use_annotation', False):
-                    #y_pred = self.annotation_maps(y_fake)
-                    BCE = self.bce(y_pred, gt_onehot)
-                    G_loss += BCE * self.config['bce_lambda']
-                if self.config['use_fg_kp']:
-                    bg_index = self.config['bg_label_index']
-                    fg_label = 1- gt_onehot[:, bg_index:bg_index+1, :, :]
-                    fg_heat_map = self.fg_kp_maps(fg_kp_heatmap)
-                    G_loss += self.bce(fg_heat_map, fg_label)
-                return y_fake.permute(0, 2, 3, 1), G_loss
+                G_loss = 0
+                for i in range(self.config['batch_size']):
+                    D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake[i].unsqueeze(0))
+                    G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
+                    L1 = self.l1(y_fake[i], gt_imgs[i]) * self.config['l1_lambda']
+                    G_loss += G_fake_loss + L1
+                    if self.config.get('use_annotation', False):
+                        #y_pred = self.annotation_maps(y_fake)
+                        BCE = self.bce(y_preds[i], gt_onehot[i])
+                        G_loss += BCE * self.config['bce_lambda']
+                    if self.config['use_fg_kp']:
+                        bg_index = self.config['bg_label_index']
+                        fg_label = 1- gt_onehot[i][:, bg_index:bg_index+1, :, :]
+                        avg_fg_kp_heatmap = torch.mean(fg_kp_heatmap, dim=1, keepdim=True)
+                        G_loss += self.mse(avg_fg_kp_heatmap, fg_label)
+                G_loss /= self.config['batch_size']
+                return y_fake, G_loss
         else:
-            return y_fake.permute(0, 2, 3, 1), None
-
+            return y_fake, None

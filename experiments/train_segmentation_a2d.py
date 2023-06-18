@@ -11,7 +11,6 @@ import pims
 from preprocessors import pipelines
 from utils import train_utils
 from utils import data_utils
-from utils import image_utils
 from models import segmentation
 
 
@@ -22,33 +21,36 @@ def pytorch_to_tensor(images):
     return tensor_images
 
 
-def load_a2d_frame_image_patches(dataset_dir, feature_dict, patch_size=(256,256)):
+def load_a2d_frame_images(dataset_dir, feature_dict, patch_size=(256,256)):
     fids = [int(fid) for fid in feature_dict['fids'].split(pipelines.A2D_FID_SEP)]
     vf = pipelines.A2D_CLIP_PATH.format(root=dataset_dir, vid=feature_dict['vid'])
     v = pims.Video(vf)
-    imgs = []
-    patch_coords = []
+    samples = []
     for i in fids:
-        np_imgs, patch_coordinates = image_utils.image_to_patches(v[i], tuple(patch_size))
-        imgs.append([torch.from_numpy(np_img) for np_img in np_imgs])
-        patch_coords.append(patch_coordinates)
-    return imgs, patch_coords
+        #np_imgs, patch_coordinates = image_utils.image_to_patches(v[i], tuple(patch_size))
+        #sample = {
+        #    'patches': [torch.from_numpy(np_img) for np_img in np_imgs],
+        #    'patch_coords': torch.tensor(patch_coordinates)
+        #}
+        samples.append(torch.from_numpy(v[i]))
+    return samples
 
 
-def load_a2d_label_map_patches(dataset_dir, feature_dict, patch_size=(256, 256)):
+def load_a2d_label_maps(dataset_dir, feature_dict, patch_size=(256, 256)):
     fids = [fid for fid in feature_dict['fids'].split(pipelines.A2D_FID_SEP)]
-    label_maps = []
-    patch_coords = []
+    targets = []
     for fid in fids:
         fmat = pipelines.A2D_ANNOTATION_PATH.format(
             root=dataset_dir, vid=feature_dict['vid'], fid=fid)
         with h5py.File(fmat, 'r') as mat_file:
             mat = np.array(mat_file['reS_id']).T
-            np_maps, patch_coord = image_utils.image_to_patches(mat, tuple(patch_size))
-            label_map = [torch.from_numpy(np_map).long() for np_map in np_maps]
-            patch_coords.append(patch_coord)
-        label_maps.append(label_map)
-    return label_maps, patch_coords
+            #np_maps, patch_coord = image_utils.image_to_patches(mat, tuple(patch_size))
+            #target = {
+            #    'target_patches': [torch.from_numpy(np_map).long() for np_map in np_maps],
+            #    'patch_coords': torch.tensor(patch_coord)
+            #}
+            targets.append(torch.from_numpy(mat).long())
+    return targets
 
 
 def main():
@@ -62,9 +64,8 @@ def main():
         'vid': (lambda x: str(x))
     }
     train_a2d_cols = {
-        'image': lambda x: load_a2d_frame_image_patches(config['dataset_dir'], x)[0],
-        'gt': lambda x: load_a2d_label_map_patches(config['dataset_dir'], x)[0],
-        'patch_coords': lambda x: load_a2d_label_map_patches(config['dataset_dir'], x)[1]
+        'frames': lambda x: load_a2d_frame_images(config['dataset_dir'], x),
+        'gt_frames': lambda x: load_a2d_label_maps(config['dataset_dir'], x)
     }
 
     logger_dir = config.get("logger_dir", train_utils.DEFAULT_LOGGER_DIR)

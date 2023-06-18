@@ -8,10 +8,10 @@ val_prediction_fstr: 'val_predictions/{vid}/{fids}.jpg'
 skip_training: False
 input_size: [320, 768]
 # pix2pix settings
-patch_size: [256, 256]
+patch_size: 256
 gen_features: 64
 n_gen_enc: 6
-disc_features: [64,128, 256, 512]
+disc_features: [64, 128, 256, 512]
 in_channels: 3
 l1_lambda: 100
 bce_lambda: 100
@@ -27,7 +27,7 @@ bilinear: True
 #Settings
 learning_rate: 0.0001
 monitor: 'val_loss'
-epochs: 50
+epochs: 500
 batch_size: 2
 clear_cache: False
 limit:
