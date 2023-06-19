@@ -44,7 +44,7 @@ def load_a2d_label_maps(dataset_dir, feature_dict, patch_size=(256, 256)):
 
 
 def main():
-    config = train_utils.read_config("config/a2d_video_segmentation.yaml")
+    config = train_utils.read_config("config/a2d_motion_video_segmentation.yaml")
     if not config.get("skip_prep_data", False):
         pipelines.a2d_video_images(
             config['dataset_dir'], config['label_colors_json'], config['train_val_ratio'])
@@ -60,7 +60,7 @@ def main():
 
     logger_dir = config.get("logger_dir", train_utils.DEFAULT_LOGGER_DIR)
     os.makedirs(logger_dir, exist_ok=True)
-    model_obj = segmentation.Pix2Pix(
+    model_obj = segmentation.Pix2PixMotion(
         config, multi_fname_sep=pipelines.A2D_FID_SEP).to(train_utils.device)
     print("model initialized. ")
     latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name']) \
@@ -114,7 +114,7 @@ def main():
         v = pims.Video(vf)
         for fid in row['fids'].split(pipelines.A2D_FID_SEP):
             output_fname = os.path.join(model_eval_dir, row['vid']+'/'+fid+'.jpg')
-            segments = model.segments([v[int(fid)]])[0]
+            segments = model.video_segments([v[int(fid)]])[0]
             output_image = PilImage.fromarray(segments, mode='RGB')
             output_image.save(output_fname)
 

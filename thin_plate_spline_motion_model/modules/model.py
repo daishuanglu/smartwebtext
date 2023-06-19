@@ -2,6 +2,7 @@ from torch import nn
 import torch
 import torch.nn.functional as F
 from thin_plate_spline_motion_model.modules.util import AntiAliasInterpolation2d, TPS
+from thin_plate_spline_motion_model.modules import inpainting_network, dense_motion, keypoint_detector, bg_motion_predictor
 from torchvision import models
 import numpy as np
 
@@ -171,6 +172,115 @@ class GeneratorFullModel(torch.nn.Module):
 
             loss_values['warp_loss'] = self.loss_weights['warp_loss'] * value
         
+        # bg loss
+        if self.bg_predictor and epoch >= self.bg_start and self.loss_weights['bg'] != 0:
+            bg_param_reverse = self.bg_predictor(x['driving'], x['source'])
+            value = torch.matmul(bg_param, bg_param_reverse)
+            eye = torch.eye(3).view(1, 1, 3, 3).type(value.type())
+            value = torch.abs(eye - value).mean()
+            loss_values['bg'] = self.loss_weights['bg'] * value
+
+        return loss_values, generated
+
+
+class GeneratorFullModelFromConfig(torch.nn.Module):
+    """
+    Merge all generator related updates into single model for better multi-gpu usage
+    """
+
+    def __init__(self, model_params, train_params, *kwargs):
+        super(GeneratorFullModelFromConfig, self).__init__()
+        self.inpainting = inpainting_network.InpaintingNetwork(
+            **model_params['generator_params'],
+            **model_params['common_params'])
+        self.kp_extractor = keypoint_detector.KPDetector(**model_params['common_params'])
+        self.dense_motion_network = dense_motion.DenseMotionNetwork(
+            **model_params['common_params'],
+            **model_params['dense_motion_params'])
+        if (model_params['common_params']['bg']):
+            self.bg_predictor = bg_motion_predictor.BGMotionPredictor()
+
+        self.bg_start = train_params['bg_start']
+        self.train_params = train_params
+        self.scales = train_params['scales']
+        self.pyramid = ImagePyramide(self.scales, self.inpainting.num_channels)
+        self.loss_weights = train_params['loss_weights']
+        self.dropout_epoch = train_params['dropout_epoch']
+        self.dropout_maxp = train_params['dropout_maxp']
+        self.dropout_inc_epoch = train_params['dropout_inc_epoch']
+        self.dropout_startp = train_params['dropout_startp']
+
+        if sum(self.loss_weights['perceptual']) != 0:
+            self.vgg = Vgg19()
+            if torch.cuda.is_available():
+                self.vgg = self.vgg.cuda()
+
+    def forward(self, x, epoch):
+        kp_source = self.kp_extractor(x['source'])
+        kp_driving = self.kp_extractor(x['driving'])
+        bg_param = None
+        if self.bg_predictor:
+            if (epoch >= self.bg_start):
+                bg_param = self.bg_predictor(x['source'], x['driving'])
+
+        if (epoch >= self.dropout_epoch):
+            dropout_flag = False
+            dropout_p = 0
+        else:
+            # dropout_p will linearly increase from dropout_startp to dropout_maxp
+            dropout_flag = True
+            dropout_p = min(epoch / self.dropout_inc_epoch * self.dropout_maxp + self.dropout_startp, self.dropout_maxp)
+
+        dense_motion = self.dense_motion_network(source_image=x['source'], kp_driving=kp_driving,
+                                                 kp_source=kp_source, bg_param=bg_param,
+                                                 dropout_flag=dropout_flag, dropout_p=dropout_p)
+        generated = self.inpainting_network(x['source'], dense_motion)
+        generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
+
+        loss_values = {}
+
+        pyramide_real = self.pyramid(x['driving'])
+        pyramide_generated = self.pyramid(generated['prediction'])
+
+        # reconstruction loss
+        if sum(self.loss_weights['perceptual']) != 0:
+            value_total = 0
+            for scale in self.scales:
+                x_vgg = self.vgg(pyramide_generated['prediction_' + str(scale)])
+                y_vgg = self.vgg(pyramide_real['prediction_' + str(scale)])
+
+                for i, weight in enumerate(self.loss_weights['perceptual']):
+                    value = torch.abs(x_vgg[i] - y_vgg[i].detach()).mean()
+                    value_total += self.loss_weights['perceptual'][i] * value
+            loss_values['perceptual'] = value_total
+
+        # equivariance loss
+        if self.loss_weights['equivariance_value'] != 0:
+            transform_random = TPS(mode='random', bs=x['driving'].shape[0], **self.train_params['transform_params'])
+            transform_grid = transform_random.transform_frame(x['driving'])
+            transformed_frame = F.grid_sample(x['driving'], transform_grid, padding_mode="reflection",
+                                              align_corners=True)
+            transformed_kp = self.kp_extractor(transformed_frame)
+
+            generated['transformed_frame'] = transformed_frame
+            generated['transformed_kp'] = transformed_kp
+
+            warped = transform_random.warp_coordinates(transformed_kp['fg_kp'])
+            kp_d = kp_driving['fg_kp']
+            value = torch.abs(kp_d - warped).mean()
+            loss_values['equivariance_value'] = self.loss_weights['equivariance_value'] * value
+
+        # warp loss
+        if self.loss_weights['warp_loss'] != 0:
+            occlusion_map = generated['occlusion_map']
+            encode_map = self.inpainting_network.get_encode(x['driving'], occlusion_map)
+            decode_map = generated['warped_encoder_maps']
+            value = 0
+            for i in range(len(encode_map)):
+                value += torch.abs(encode_map[i] - decode_map[-i - 1]).mean()
+
+            loss_values['warp_loss'] = self.loss_weights['warp_loss'] * value
+
         # bg loss
         if self.bg_predictor and epoch >= self.bg_start and self.loss_weights['bg'] != 0:
             bg_param_reverse = self.bg_predictor(x['driving'], x['source'])

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eux
 fdir=${2:-"smartwebtext"}
-IP="35.230.94.101"
+IP="34.82.60.55"
 a="code"
 b="prnews"
 c="fasttext"
@@ -42,6 +42,7 @@ then
   #scp -r evaluation shuangludai@$IP:/home/shuangludai/$fdir
   scp -r professional shuangludai@$IP:/home/shuangludai/$fdir
   scp -r tools shuangludai@$IP:/home/shuangludai/$fdir
+  scp -r modules shuangludai@$IP:/home/shuangludai/$fdir
   scp -r thin_plate_spline_motion_model shuangludai@$IP:/home/shuangludai/$fdir
   scp env_setup.sh shuangludai@$IP:/home/shuangludai/$fdir
 fi

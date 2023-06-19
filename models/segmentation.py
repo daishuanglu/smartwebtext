@@ -1,35 +1,20 @@
 from abc import ABC
 import pytorch_lightning as ptl
 from typing import Any, List
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+
 import numpy as np
 import PIL.Image as PilImage
 import re
 import os
 import itertools
-
+import random
 from utils.train_utils import device
 from utils import color_utils
 from utils import image_utils
+from modules.layers import *
+from thin_plate_spline_motion_model.modules.util import *
+from thin_plate_spline_motion_model.modules import keypoint_detector, bg_motion_predictor
 
-"""
-def pad_or_crop(self, list_of_tensor2d, centercrop_transform):
-    padded = []
-    for tensor in list_of_tensor2d:
-        height_pad = max(self.config['input_size'][0] - tensor.shape[0], 0)
-        width_pad = max(self.config['input_size'][1] - tensor.shape[1], 0)
-        top_pad = height_pad // 2
-        bottom_pad = height_pad - top_pad
-        left_pad = width_pad // 2
-        right_pad = width_pad - left_pad
-        padded_tensor = F.pad(
-            tensor, (left_pad, right_pad, top_pad, bottom_pad), mode='constant', value=-1)
-        padded_tensor = centercrop_transform(padded_tensor)
-        padded.append(padded_tensor)
-    return padded
-"""
 def flatten_list(nested_list):
     flattened_list = []
     for sublist in nested_list:
@@ -40,18 +25,10 @@ def flatten_list(nested_list):
     return flattened_list
 
 
-def generate_color_segments(probs2D, label_colors):
-    classId = probs2D.argmax(axis=-1)
-    # Use gather to assign colors to each pixel location
-    color_maps = label_colors[classId].numpy()
-    return color_maps
-
-
 class SegmentationEngine(ptl.LightningModule, ABC):
     def __init__(self,
                  batch_size,
                  learning_rate,
-                 network_type='gan',
                  predictions_fstr=None,
                  predictions_fsep=None,
                  label_colors_json=None):
@@ -63,6 +40,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         print('Initializing Pix2pix image segment color generator.')
         self.predictions_fstr = predictions_fstr
         self.sep = predictions_fsep if predictions_fsep else None
+        self.check_annotations = False
         if not label_colors_json:
             label_colors = color_utils.generate_colors(self.config['out_channels'])
             self.label_colors = torch.tensor(label_colors)
@@ -74,7 +52,8 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             for i, d in enumerate(label_colors):
                 self.color_index[d['id']] = i
             self.color_index = self.color_index.long().to(device)
-        self.network_type = network_type
+        self.val_optimizer_idx = 1
+        self.loss_names = None
 
     def build_network(self):
         assert NotImplementedError(), 'Need to implement the network architecture.'
@@ -83,32 +62,16 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         assert NotImplementedError(), 'Need to implement the network forward.'
 
     def training_step(self, batch, batch_nb):
-        if self.network_type == 'gan':
-            return self.gan_training_step(batch, batch_nb)
-        else:
-            return self.reg_training_step(batch, batch_nb)
-
-    def gan_training_step(self, batch, batch_nb):
-        optimizer_d, optimizer_g = self.optimizers()
-        # train discriminator
-        # Measure discriminator's ability to classify real from generated samples
-        self.toggle_optimizer(optimizer_d, optimizer_idx=0)
-        #self.set_requires_grad(self.disc, True)  # enable backprop for D
-        outputs, d_loss = self.forward(batch, True, 0)
-        self.log("d_loss", d_loss.item(), prog_bar=True)
-        # self.log_dict({'d_loss': d_loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
-        self.manual_backward(d_loss)
-        optimizer_d.step()
-        optimizer_d.zero_grad()
-        self.untoggle_optimizer(optimizer_d)
-        #self.set_requires_grad(self.disc, False)  # enable backprop for D
-        self.toggle_optimizer(optimizer_g, optimizer_idx=1)
-        outputs, g_loss = self.forward(batch, True, 1)
-        self.log("g_loss", g_loss.item(), prog_bar=True)
-        self.manual_backward(g_loss)
-        optimizer_g.step()
-        optimizer_g.zero_grad()
-        self.untoggle_optimizer(optimizer_g)
+        loss_names = ['loss_%d' % i for i in range(
+            len(self.optimizers()))] if self.loss_names is None else self.loss_names
+        for i, (optimizer_i, loss_name) in enumerate(zip(self.optimizers(), loss_names)):
+            self.toggle_optimizer(optimizer_i, optimizer_idx=i)
+            _, _, loss = self.forward(batch, True, i)
+            self.log(loss_name, loss.item(), prog_bar=True)
+            self.manual_backward(loss)
+            optimizer_i.step()
+            optimizer_i.zero_grad()
+            self.untoggle_optimizer(optimizer_i)
 
     def reg_training_step(self, batch, batch_nb):
         # Train generator
@@ -133,12 +96,17 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         return prediction_file_paths
 
     def validation_step(self, batch, batch_nb, optimizer_idx=1):
-        outputs, loss = self(batch, compute_loss=True, optimizer_idx=optimizer_idx)
+        outputs, logits, loss = self(batch, compute_loss=True, optimizer_idx=self.val_optimizer_idx)
+        outputs = logits if self.check_annotations else outputs
         loss = loss.item()
         if self.predictions_fstr is not None:
             predictions_paths = self.get_prediction_path(batch)
             for output, save_path in zip(outputs, predictions_paths):
-                color_segments = ((output+1)/2 * 255).long().permute(1, 2, 0).detach().cpu().numpy()
+                if self.check_annotations:
+                    color_segments = self.label_colors[output.permute(1,2,0).argmax(axis=-1)]
+                    color_segments = color_segments.detach().cpu().numpy()
+                else:
+                    color_segments = (output * 255).long().permute(1, 2, 0).detach().cpu().numpy()
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 PilImage.fromarray(color_segments.astype('uint8')).save(save_path)
         self.log_dict({'val_loss': loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
@@ -154,126 +122,8 @@ class SegmentationEngine(ptl.LightningModule, ABC):
     def segments(self, list_of_images: List[np.array]):
         self.eval()
         outputs, _ = self({'frames': [torch.from_numpy(img) for img in list_of_images]})
-        segments = [((output+1)/2*255).long().permute(1, 2, 0).detach().numpy() for output in outputs]
+        segments = [(output*255).long().permute(1, 2, 0).detach().numpy() for output in outputs]
         return segments.astype('uint8')
-
-
-class DiscCNNBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=2):
-        super(DiscCNNBlock, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(
-                in_channels, out_channels, kernel_size=4, stride=stride, padding=1, bias=False, padding_mode="reflect"),
-            nn.BatchNorm2d(out_channels),
-            #nn.InstanceNorm2d(out_channels, affine=True),
-            nn.LeakyReLU(0.2)
-        )
-
-    def forward(self, x):
-        return self.conv(x)
-
-
-class Discriminator(nn.Module):
-    def __init__(self, in_channels, features=[64,128, 256, 512], out_channels=1):
-        super(Discriminator, self).__init__()
-        self.initial = nn.Sequential(
-            nn.Conv2d(
-                in_channels,
-                features[0], kernel_size=4, stride=2, padding=1, padding_mode="reflect"),
-            nn.LeakyReLU(0.2)
-        )
-        self.layers = nn.ModuleList()
-        in_channels = features[0]
-        for feature in features[1:]:
-            self.layers.append(
-                DiscCNNBlock(in_channels, feature, stride=1 if feature == features[-1] else 2))
-            in_channels = feature
-        self.output = nn.Conv2d(
-            in_channels, out_channels, kernel_size=4, stride=1, padding=1, padding_mode="reflect")
-
-    def forward(self, x, y):
-        x = torch.cat([x, y], dim=1)
-        x = self.initial(x)
-        for layer in self.layers:
-            x = layer(x)
-        x = self.output(x)
-        return x
-
-
-class GenCNNBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, down=True, act="relu", use_dropout=False):
-        super(GenCNNBlock, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(
-                in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False, padding_mode="reflect")
-            if down
-            else nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            # For some reason the InstanceNorm2d not working. However most of the pix2pix SOTA work use Instance
-            # Norm instead of batchNorm here. Probably better with ResNetGenBlock not Unet.
-            #nn.InstanceNorm2d(out_channels, affine=True),
-            nn.LeakyReLU(0.2) if act == 'leaky' else nn.ReLU()
-        )
-        self.use_dropout= use_dropout
-        self.dropout = nn.Dropout(0.5)
-
-    def forward(self, x):
-        x = self.conv(x)
-        return self.dropout(x) if self.use_dropout else x
-
-
-class Generator(nn.Module):
-    def __init__(self, in_channels=3, features=64, n_layers=6, out_channels=None):
-        super(Generator, self).__init__()
-        out_channels = in_channels if out_channels is None else out_channels
-        self.initial = nn.Sequential(
-            nn.Conv2d(in_channels, features, kernel_size=4, stride=2, padding=1, padding_mode='reflect')
-        )
-        self.down_layers = nn.ModuleList()
-        channel_multipliers = [min(8, 2**i) for i in range(n_layers)]
-        in_multiplier = channel_multipliers[0]
-        for out_multiplier in channel_multipliers[1:]:
-            self.down_layers.append(GenCNNBlock(
-                features*in_multiplier, features*out_multiplier, down=True, act='relu', use_dropout=False))
-            in_multiplier = out_multiplier
-        self.bottleneck = nn.Sequential(
-            nn.Conv2d(features*in_multiplier,
-                      features*in_multiplier,
-                      kernel_size=4,
-                      stride=2,
-                      padding=1,
-                      padding_mode='reflect'),
-            nn.ReLU(), # 1x1
-            GenCNNBlock(
-                features*in_multiplier, features*in_multiplier, down=False, act='relu', use_dropout=False),
-        )
-        self.up_layers = nn.ModuleList()
-        for out_multiplier in channel_multipliers[::-1][1:]:
-            self.up_layers.append(GenCNNBlock(
-                features * in_multiplier * 2,
-                features * out_multiplier,
-                down=False, act='leaky', use_dropout=False))
-            in_multiplier = out_multiplier
-        self.output = nn.Sequential(
-            nn.ConvTranspose2d(features*2, out_channels, kernel_size=4, stride=2, padding=1),
-            nn.Tanh()
-        )
-
-    def forward(self, x):
-        x = self.initial(x)
-        encoder_outputs = [x]
-        for layer in self.down_layers:
-            x = layer(x)
-            encoder_outputs.append(x)
-        x = self.bottleneck(x)
-        for layer in self.up_layers:
-            x = layer(torch.cat((x, encoder_outputs.pop()), dim=1))
-        x = self.output(torch.cat((x, encoder_outputs.pop()), dim=1))
-        return x
-
-
-from thin_plate_spline_motion_model.modules.keypoint_detector import KPDetector
-from thin_plate_spline_motion_model.modules.dense_motion import kp2gaussian
 
 
 class Pix2Pix(SegmentationEngine):
@@ -289,27 +139,22 @@ class Pix2Pix(SegmentationEngine):
         self.build_network()
         self.mse = nn.MSELoss()
         self.l1 = nn.L1Loss()
-        self.bce = nn.BCEWithLogitsLoss()
+        self.ce = nn.CrossEntropyLoss()
+        self.val_optimizer_idx = 1
 
     def build_network(self):
         gen_in_channels = self.config['in_channels']
-        if self.config['use_fg_kp']:
-            gen_in_channels += self.config['num_tps']*5 + 1
-            self.kp_extractor = KPDetector(num_tps=self.config['num_tps'])
-            #self.fg_kp_maps = nn.Conv2d(
-            #    self.config['num_tps'] * 5 + 1, 1, kernel_size=(7, 7), padding=(3, 3))
-        gen_out_channels = self.config['in_channels']
-        if self.config.get('use_annotation', False):
-            gen_out_channels += self.config['out_channels']
+        gen_out_channels = self.config['in_channels'] + self.config['out_channels']
         self.gen = Generator(
             gen_in_channels,
             features=self.config['gen_features'],
             n_layers=self.config['n_gen_enc'],
             out_channels=gen_out_channels)
-        #if self.config.get('use_annotation', True):
-        #    self.annotation_maps = nn.Conv2d(
-        #        self.config['in_channels'],
-        #        self.config['out_channels'], kernel_size=(7, 7), padding=(3, 3))
+        #self.gen = Hourglass(
+        #    block_expansion=self.config['out_channels'],
+        #    in_features=self.config['in_channels'],
+        #    num_blocks=3,
+        #    max_features=256)
         disc_input_channel = self.config['in_channels'] * 2
         disc_output_channel = self.config['in_channels']
         self.disc = Discriminator(
@@ -317,74 +162,298 @@ class Pix2Pix(SegmentationEngine):
             self.config['disc_features'],
             disc_output_channel)
 
-    def kp_heatmap_repr(self, source_image, kp_source):
-        spatial_size = source_image.shape[2:]
-        gaussian_source = kp2gaussian(
-            kp_source['fg_kp'], spatial_size=spatial_size, kp_variance=self.config['kp_variance'])
-        heatmap = gaussian_source
-        zeros = torch.zeros(heatmap.shape[0], 1, spatial_size[0], spatial_size[1]).type(heatmap.type()).to(
-            heatmap.device)
-        heatmap = torch.cat([zeros, heatmap], dim=1)
-        return heatmap
-
     def configure_optimizers(self):
         b1, b2 = 0.5, 0.999
         opt_g = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
         opt_d = torch.optim.Adam(self.disc.parameters(), lr=self.lr, betas=(b1, b2))
-        return [opt_d, opt_g], []
+        opt_a = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
+        # Use the below lines if trying with annotation loss
+        self.loss_names = ['d_loss', 'g_loss', 'a_loss']
+        return [opt_d, opt_g, opt_a], []
+        # Use the commented lines if not doing annotation loss
+        #self.loss_names = ['d_loss', 'g_loss']
+        #return [opt_d, opt_g], []
 
     def forward(self, batch, compute_loss=False, optimizer_idx=0):
         x = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
+        n_frames = len(x)
         x_patches, x_coords = image_utils.image_tensors_to_patches(x, self.config['patch_size'])
         x_patches = x_patches.to(device).float()
-        if self.config['use_fg_kp']:
-            fg_kp = self.kp_extractor(x_patches)
-            fg_kp_heatmap = self.kp_heatmap_repr(x_patches, fg_kp)
-            y_fake = self.gen(torch.cat([fg_kp_heatmap, x_patches], dim=1))
-        else:
-            y_fake = self.gen(x_patches)
-        if self.config.get('use_annotation', False):
-            y_preds = y_fake[:, self.config['in_channels']:, :, :]
-            y_fake = y_fake[:, :self.config['in_channels'], :, :]
-            y_preds = image_utils.patches_to_image_tensors(y_preds, x_coords)
-        y_fake = image_utils.patches_to_image_tensors(y_fake, x_coords)
+        y_fake_logits = self.gen(x_patches)
+        y_fake_logits = image_utils.patches_to_image_tensors(y_fake_logits, x_coords)
+        y_fake_probs = [torch.tanh(logits) for logits in y_fake_logits]
+        y_preds_logits = [y_fake[self.config['in_channels']:, :, :] for y_fake in y_fake_logits]
+        y_fake_probs = [y_fake[:self.config['in_channels'], :, :] for y_fake in y_fake_probs]
+        #y_preds = image_utils.patches_to_image_tensors(y_preds, x_coords)
+        #y_fake = image_utils.patches_to_image_tensors(y_fake, x_coords)
         if compute_loss:
             gts =  flatten_list(batch['gt_frames'])
             gt_imgs = [self.label_colors[self.color_index[gt.to(device)]] for gt in gts]
             gt_imgs = [gt_img.permute(2,0,1).float()/255 for gt_img in gt_imgs]
             gt_index = [self.color_index[gt.to(device)] for gt in gts]
-            gt_onehot = [F.one_hot(
-                gt_idx, num_classes=self.config['out_channels']) for gt_idx in gt_index]
-            gt_onehot = [_gt.permute(2, 0, 1).float() for _gt in gt_onehot]
+            #gt_onehot = [F.one_hot(
+            #    gt_idx, num_classes=self.config['out_channels']) for gt_idx in gt_index]
+            #gt_onehot = [_gt.permute(2, 0, 1).float() for _gt in gt_onehot]
             if optimizer_idx == 0:
                 D_loss = 0
-                for i in range(self.config['batch_size']):
+                for i in range(n_frames):
                     x[i] = x[i].to(device)
                     D_real = self.disc(x[i].unsqueeze(0), gt_imgs[i].unsqueeze(0))
-                    D_fake = self.disc(x[i].unsqueeze(0), y_fake[i].detach().unsqueeze(0))
+                    D_fake = self.disc(x[i].unsqueeze(0), y_fake_probs[i].detach().unsqueeze(0))
                     D_real_loss = self.mse(D_real, torch.ones_like(D_real))
                     D_fake_loss = self.mse(D_fake, torch.zeros_like(D_fake))
                     D_loss += (D_real_loss + D_fake_loss) / 2
-                D_loss /= self.config['batch_size']
-                return y_fake, D_loss
+                D_loss /= n_frames
+                return y_fake_probs, y_preds_logits, D_loss
             if optimizer_idx == 1:
                 # generator loss
                 G_loss = 0
-                for i in range(self.config['batch_size']):
-                    D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake[i].unsqueeze(0))
+                for i in range(n_frames):
+                    D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
                     G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
-                    L1 = self.l1(y_fake[i], gt_imgs[i]) * self.config['l1_lambda']
+                    L1 = self.l1(y_fake_probs[i], gt_imgs[i]) * self.config['l1_lambda']
                     G_loss += G_fake_loss + L1
-                    if self.config.get('use_annotation', False):
-                        #y_pred = self.annotation_maps(y_fake)
-                        BCE = self.bce(y_preds[i], gt_onehot[i])
-                        G_loss += BCE * self.config['bce_lambda']
-                    if self.config['use_fg_kp']:
-                        bg_index = self.config['bg_label_index']
-                        fg_label = 1- gt_onehot[i][:, bg_index:bg_index+1, :, :]
-                        avg_fg_kp_heatmap = torch.mean(fg_kp_heatmap, dim=1, keepdim=True)
-                        G_loss += self.mse(avg_fg_kp_heatmap, fg_label)
-                G_loss /= self.config['batch_size']
-                return y_fake, G_loss
+                G_loss /= n_frames
+                return y_fake_probs, y_preds_logits, G_loss
+            if optimizer_idx == 2:
+                G_loss = 0
+                for i in range(n_frames):
+                    D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
+                    G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
+                    y_pred_logit = y_preds_logits[i].permute(1, 2, 0).view(-1, y_preds_logits[i].shape[0])
+                    L2 = self.ce(y_pred_logit, gt_index[i].reshape(-1))
+                    #L2 = self.mse(y_preds[i], gt_onehot[i]) * self.config['l2_lambda']
+                    G_loss += G_fake_loss + L2
+                G_loss /= n_frames
+                return y_fake_probs, y_preds_logits, G_loss
         else:
-            return y_fake, None
+            return y_fake_probs,  None
+
+
+class Pix2PixMotion(SegmentationEngine):
+    def __init__(self, config, multi_fname_sep=None):
+        super(Pix2PixMotion, self).__init__(
+            batch_size=config['batch_size'],
+            learning_rate=config['learning_rate'],
+            predictions_fstr=config.get('val_prediction_fstr', None),
+            predictions_fsep=multi_fname_sep,
+            label_colors_json=config.get('label_colors_json', None)
+        )
+        self.config = config
+        self.build_network()
+        self.mse = nn.MSELoss()
+        self.l1 = nn.L1Loss()
+        self.ce = nn.CrossEntropyLoss()
+        self.val_optimizer_idx = 1
+
+    def build_network(self):
+        gen_in_channels = self.config['in_channels']
+        self.gen_out_channels = self.config['in_channels'] + self.config['out_channels']
+        self.gen = Generator(
+            gen_in_channels,
+            features=self.config['gen_features'],
+            n_layers=self.config['n_gen_enc'],
+            out_channels=self.gen_out_channels)
+        disc_input_channel = self.config['in_channels'] * 2
+        disc_output_channel = self.config['in_channels']
+        self.disc = Discriminator(
+            disc_input_channel,
+            self.config['disc_features'],
+            disc_output_channel)
+        self.kp_extractor = keypoint_detector.KPDetector(
+            **self.config['tps_model_params']['common_params'])
+        self.bg_predictor = bg_motion_predictor.BGMotionPredictor()
+        self.global_gru = GlobalHiddenUpdater(g_dim=self.gen_out_channels)
+        self.num_tps = self.config['tps_model_params']['common_params']['num_tps']
+        self.tps_deformed_weigthed_sum = nn.Linear(self.num_tps+1, 1)
+        #self.motion = GeneratorFullModelFromConfig(
+        #    self.config['tps_model_params'],
+        #    self.config['tps_train_params'])
+        #self.hourglass_gru = Hourglass(
+        #    block_expansion=self.config['out_channels'],
+        #    in_features=self.gen_out_channels*2,
+        #    **self.config['hourglass_gru_params'])
+
+    def configure_optimizers(self):
+        b1, b2 = 0.5, 0.999
+        opt_g = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
+        opt_d = torch.optim.Adam(self.disc.parameters(), lr=self.lr, betas=(b1, b2))
+        #opt_a = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
+        opt_m = torch.optim.Adam([
+            {'params': self.gen.parameters()},
+            {'params': self.global_gru.parameters()},
+            {'params': self.bg_predictor.parameters()},
+            {'params': self.kp_extractor.parameters()}
+        ], lr=self.lr, betas=(b1, b2))
+        #opt_m = torch.optim.Adam(
+        #    self.motion.parameters(),
+        #    lr=self.config['tps_train_params']['lr_generator'],
+        #    betas=(b1, b2), weight_decay=1e-4)
+        self.loss_names = ['d_loss', 'g_loss', 'm_loss']
+        return [opt_d, opt_g, opt_m], []
+
+    def create_transformations(self, source_image, kp_driving, kp_source, bg_param):
+        # K TPS transformaions
+        bs, _, h, w = source_image.shape
+        kp_1 = kp_driving['fg_kp']
+        kp_2 = kp_source['fg_kp']
+        kp_1 = kp_1.view(bs, -1, 5, 2)
+        kp_2 = kp_2.view(bs, -1, 5, 2)
+        trans = TPS(mode = 'kp', bs = bs, kp_1 = kp_1, kp_2 = kp_2)
+        driving_to_source = trans.transform_frame(source_image)
+
+        identity_grid = make_coordinate_grid((h, w), type=kp_1.type()).to(kp_1.device)
+        identity_grid = identity_grid.view(1, 1, h, w, 2)
+        identity_grid = identity_grid.repeat(bs, 1, 1, 1, 1)
+
+        # affine background transformation
+        if not (bg_param is None):
+            identity_grid = to_homogeneous(identity_grid)
+            identity_grid = torch.matmul(bg_param.view(bs, 1, 1, 1, 3, 3), identity_grid.unsqueeze(-1)).squeeze(-1)
+            identity_grid = from_homogeneous(identity_grid)
+
+        transformations = torch.cat([identity_grid, driving_to_source], dim=1)
+        return transformations
+
+    def create_deformed_source_image(self, source_image, transformations):
+
+        bs, _, h, w = source_image.shape
+        source_repeat = source_image.unsqueeze(1).unsqueeze(1).repeat(1, self.num_tps + 1, 1, 1, 1, 1)
+        source_repeat = source_repeat.view(bs * (self.num_tps + 1), -1, h, w)
+        transformations = transformations.view((bs * (self.num_tps + 1), h, w, -1))
+        deformed = F.grid_sample(source_repeat, transformations, align_corners=True)
+        deformed = deformed.view((bs, self.num_tps+1, -1, h, w))
+        return deformed
+
+    def disc_loss(self, x, y_fake_probs, gt_imgs, n_frames):
+        D_loss = 0
+        for i in range(n_frames):
+            x[i] = x[i].to(device)
+            D_real = self.disc(x[i].unsqueeze(0), gt_imgs[i].unsqueeze(0))
+            D_fake = self.disc(x[i].unsqueeze(0), y_fake_probs[i].detach().unsqueeze(0))
+            D_real_loss = self.mse(D_real, torch.ones_like(D_real))
+            D_fake_loss = self.mse(D_fake, torch.zeros_like(D_fake))
+            D_loss += (D_real_loss + D_fake_loss) / 2
+        D_loss /= n_frames
+        return D_loss
+
+    def gen_loss(self, x, y_fake_probs, gt_imgs, n_frames):
+        # generator loss
+        G_loss = 0
+        for i in range(n_frames):
+            D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
+            G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
+            L1 = self.l1(y_fake_probs[i], gt_imgs[i]) * self.config['l1_lambda']
+            G_loss += G_fake_loss + L1
+        G_loss /= n_frames
+        return G_loss
+
+    def annotation_loss(self, x, y_fake_probs, y_preds_logits, gt_index, n_frames):
+        G_loss = 0
+        for i in range(n_frames):
+            D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
+            G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
+            y_pred_logit = y_preds_logits[i].permute(1, 2, 0).view(-1, y_preds_logits[i].shape[0])
+            L2 = self.ce(y_pred_logit, gt_index[i].reshape(-1))
+            # L2 = self.mse(y_preds[i], gt_onehot[i]) * self.config['l2_lambda']
+            G_loss += G_fake_loss + L2
+        G_loss /= n_frames
+        return G_loss
+
+    def frame_predictions(self, x):
+        x_patches, x_coords = image_utils.image_tensors_to_patches(x, self.config['patch_size'])
+        x_patches = x_patches.to(device).float()
+        y_fake_logits = self.gen(x_patches)
+        y_fake_logits = image_utils.patches_to_image_tensors(y_fake_logits, x_coords)
+        #y_fake_probs = [torch.tanh(logits) for logits in y_fake_logits]
+        #y_preds_logits = [y_fake[self.config['in_channels']:, :, :] for y_fake in y_fake_logits]
+        #y_fake_probs = [y_fake[:self.config['in_channels'], :, :] for y_fake in y_fake_probs]
+        return y_fake_logits
+
+    def get_driving_ids(self, batch, compute_loss):
+        n_driving_ids = [len(batch_frames) for batch_frames in batch['frames']]
+        driving_ids = [list(range(n)) for n in n_driving_ids]
+        ni_driving_ids = np.repeat(np.cumsum([0]+n_driving_ids[:-1]), n_driving_ids)
+        if compute_loss:
+            # shuffle frames for training
+            for ids in driving_ids:
+                random.shuffle(ids)
+            driving_ids = np.array(flatten_list(driving_ids)) + ni_driving_ids
+            return driving_ids
+        else:
+            # 1-step rotate frames for testing, maybe all use first frame is ok?
+            return ni_driving_ids
+
+    def deform(self, source, driving):
+        source_image = source[:self.config['in_channels'], :, :].unsqueeze(0)
+        driving_image = driving[:self.config['in_channels'], :, :].unsqueeze(0)
+        kp_source = self.kp_extractor(source_image)
+        kp_driving = self.kp_extractor(driving_image)
+        bg_param = self.bg_predictor(source_image, driving_image)
+        #heatmap_representation = self.create_heatmap_representations(source_image, kp_driving, kp_source)
+        transformations = self.create_transformations(source_image, kp_driving, kp_source, bg_param)
+        deformed_source = self.create_deformed_source_image(source.unsqueeze(0), transformations)
+        deformed_source = deformed_source.permute(0, 2,3,4,1)
+        output_deformed_source = self.tps_deformed_weigthed_sum(deformed_source)
+        return output_deformed_source.squeeze(-1)
+
+    def forward(self, batch, compute_loss=False, optimizer_idx=0):
+        x = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
+        driving_ids= self.get_driving_ids(batch, compute_loss)
+        x_driving = [x[i] for i in driving_ids]
+        if not compute_loss:
+            x, x_driving = x_driving, x
+        n_frames = len(x)
+        y_fake_logits = self.frame_predictions(x)
+        y_fake_driving_logits = self.frame_predictions(x_driving)
+        y_preds_deformed_logits = [self.deform(
+                y_pred, drv) for y_pred, drv in zip(y_fake_logits, x_driving)]
+        y_fake_driving_logits = [self.global_gru(
+            deformed_logits, drv_logits.unsqueeze(0)) for deformed_logits, drv_logits in zip(
+                y_preds_deformed_logits, y_fake_driving_logits)]
+        # Produce source image segmentation color generation probability
+        y_fake_probs = [torch.tanh(logits[:self.config['in_channels'], :, :]) for logits in y_fake_logits]
+        # Produce driving image segmentation color generation probability
+        y_fake_driving_probs = [torch.tanh(
+            logits.squeeze(0)[:self.config['in_channels'], :, :]) for logits in y_fake_driving_logits]
+        loss = None
+        if compute_loss:
+            # extract gt
+            gts = flatten_list(batch['gt_frames'])
+            gt_imgs = [self.label_colors[self.color_index[gt.to(device)]] for gt in gts]
+            gt_imgs = [gt_img.permute(2, 0, 1).float() / 255 for gt_img in gt_imgs]
+            #gt_index = [self.color_index[gt.to(device)] for gt in gts]
+            gt_imgs_driving = [gt_imgs[i] for i in driving_ids]
+            #gt_index_driving = [gt_index[i] for i in driving_ids]
+            if optimizer_idx == 0:
+                # static loss
+                D_loss = self.disc_loss(x, y_fake_probs, gt_imgs, n_frames)
+                D_loss += self.disc_loss(
+                    x_driving, y_fake_driving_probs, gt_imgs_driving, n_frames)
+                loss = D_loss / 2
+            if optimizer_idx == 1:
+                G_loss = self.gen_loss(x, y_fake_probs, gt_imgs, n_frames)
+                G_loss += self.gen_loss(x_driving,
+                                        y_fake_driving_probs,
+                                        gt_imgs_driving,
+                                        n_frames)
+                loss = G_loss / 2
+        return y_fake_driving_probs, y_fake_driving_logits, loss
+            #if optimizer_idx == 2:
+            #    M_loss = 0
+            #    for src, drv in zip(gt_imgs, gt_imgs_driving):
+            #        motion_loss, generated = self.motion(
+            #            {'source': src.unsqueeze(0), 'driving': drv.unsqueeze(0)}, self.current_epoch)
+            #        loss_values = [val.mean() for val in motion_loss.values()]
+            #        M_loss += sum(loss_values)
+            #    M_loss /= (n_frames *2)
+            #    return y_fake_driving_probs, y_preds_driving_logits, M_loss
+            #if optimizer_idx == 2:
+            #    A_loss = self.annotation_loss(x, y_fake, y_preds, gt_imgs, gt_onehot, n_frames)
+            #    A_loss += self.annotation_loss(x_driving,
+            #                            y_fake_driving,
+            #                            y_preds_driving,
+            #                            gt_imgs_driving,
+            #                            gt_onehot_driving,
+            #                            n_frames)
+            #    return y_fake, A_loss
