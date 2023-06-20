@@ -408,14 +408,16 @@ class Pix2PixMotion(SegmentationEngine):
         y_fake_driving_logits = self.frame_predictions(x_driving)
         y_preds_deformed_logits = [self.deform(
                 y_pred, drv) for y_pred, drv in zip(y_fake_logits, x_driving)]
-        y_fake_driving_logits = [self.global_gru(
+        y_fake_driving_logits_gated = [self.global_gru(
             deformed_logits, drv_logits.unsqueeze(0)) for deformed_logits, drv_logits in zip(
                 y_preds_deformed_logits, y_fake_driving_logits)]
-        # Produce source image segmentation color generation probability
+        # Produce source and driving image segmentation color generation probability
         y_fake_probs = [torch.tanh(logits[:self.config['in_channels'], :, :]) for logits in y_fake_logits]
-        # Produce driving image segmentation color generation probability
         y_fake_driving_probs = [torch.tanh(
-            logits.squeeze(0)[:self.config['in_channels'], :, :]) for logits in y_fake_driving_logits]
+            logits[:self.config['in_channels'], :, :]) for logits in y_fake_driving_logits]
+        # Produce driving image segmentation color generation probability
+        y_fake_driving_probs_gated = [torch.tanh(logits.squeeze(
+            0)[:self.config['in_channels'], :, :]) for logits in y_fake_driving_logits_gated]
         loss = None
         if compute_loss:
             # extract gt
@@ -438,7 +440,13 @@ class Pix2PixMotion(SegmentationEngine):
                                         gt_imgs_driving,
                                         n_frames)
                 loss = G_loss / 2
-        return y_fake_driving_probs, y_fake_driving_logits, loss
+            if optimizer_idx == 2:
+                M_loss = self.gen_loss(x_driving,
+                                     y_fake_driving_probs_gated,
+                                     gt_imgs_driving,
+                                     n_frames)
+                loss = M_loss
+        return y_fake_driving_probs_gated, y_fake_driving_logits_gated, loss
             #if optimizer_idx == 2:
             #    M_loss = 0
             #    for src, drv in zip(gt_imgs, gt_imgs_driving):
