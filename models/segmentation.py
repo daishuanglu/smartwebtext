@@ -12,8 +12,10 @@ from utils.train_utils import device
 from utils import color_utils
 from utils import image_utils
 from modules.layers import *
+from modules.losses import *
 from thin_plate_spline_motion_model.modules.util import *
 from thin_plate_spline_motion_model.modules import keypoint_detector, bg_motion_predictor
+
 
 def flatten_list(nested_list):
     flattened_list = []
@@ -140,7 +142,8 @@ class Pix2Pix(SegmentationEngine):
         self.mse = nn.MSELoss()
         self.l1 = nn.L1Loss()
         self.ce = nn.CrossEntropyLoss()
-        self.val_optimizer_idx = 1
+        self.dice = MulticlassDiceLoss(num_classes=self.config['out_channels'])
+        self.val_optimizer_idx = 2
 
     def build_network(self):
         gen_in_channels = self.config['in_channels']
@@ -220,10 +223,20 @@ class Pix2Pix(SegmentationEngine):
                 for i in range(n_frames):
                     D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
                     G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
-                    y_pred_logit = y_preds_logits[i].permute(1, 2, 0).view(-1, y_preds_logits[i].shape[0])
-                    L2 = self.ce(y_pred_logit, gt_index[i].reshape(-1))
+                    #y_pred_logit = y_preds_logits[i].permute(1, 2, 0).view(-1, y_preds_logits[i].shape[0])
                     #L2 = self.mse(y_preds[i], gt_onehot[i]) * self.config['l2_lambda']
-                    G_loss += G_fake_loss + L2
+                    if self.config.get('use_focal_loss', False):
+                        L2 = focal_loss(
+                            y_preds_logits[i].unsqueeze(0),
+                            gt_index[i].unsqueeze(0),
+                            alpha=self.config['focal_alpha'], gamma=self.config['focal_gamma'])
+                    elif self.config.get('use_dice_loss', False):
+                        L2 = self.dice(
+                            y_preds_logits[i].unsqueeze(0), gt_index[i].unsqueeze(0), dim=1)
+                    else:
+                        L2 = self.ce(y_preds_logits[i], gt_index[i].reshape(-1))
+                    G_loss += G_fake_loss + L2 * self.config['l2_lambda']
+                    #G_loss += L2
                 G_loss /= n_frames
                 return y_fake_probs, y_preds_logits, G_loss
         else:
