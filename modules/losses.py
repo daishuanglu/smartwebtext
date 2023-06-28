@@ -47,6 +47,23 @@ def focal_loss(outputs, targets, alpha=1.0, gamma=2.0):
     return focal_loss
 
 
+class EMA():
+    def __init__(self, alpha):
+       super().__init__()
+       self.alpha = alpha
+
+    def update_average(self, old, new):
+       if old is None:
+           return new
+       return old * self.alpha + (1 - self.alpha) * new
+
+    def flow(self, student_model, teacher_model):
+        for student_params, teacher_params in zip(student_model.parameters(), teacher_model.parameters()):
+            old_weight, up_weight = teacher_params.data, student_params.data
+            teacher_params.data = self.update_average(old_weight, up_weight)
+        return teacher_model
+
+
 if __name__=='__main__':
     # end class MulticlassDiceLoss
     criterion = MulticlassDiceLoss(num_classes=3)

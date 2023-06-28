@@ -8,11 +8,15 @@ import re
 import os
 import itertools
 import random
+
+import torch
+
 from utils.train_utils import device
 from utils import color_utils
 from utils import image_utils
 from modules.layers import *
 from modules.losses import *
+from modules.hungarian import hungarian_loss
 from thin_plate_spline_motion_model.modules.util import *
 from thin_plate_spline_motion_model.modules import keypoint_detector, bg_motion_predictor
 
@@ -25,6 +29,11 @@ def flatten_list(nested_list):
         else:
             flattened_list.append(sublist)
     return flattened_list
+
+
+def pad_or_crop_obj_mask(mask, num_of_objects):
+    padding_size = max(0, num_of_objects - mask.shape[0])
+    return F.pad(mask, (0, 0, 0, 0, 0, padding_size))[:num_of_objects]
 
 
 class SegmentationEngine(ptl.LightningModule, ABC):
@@ -45,7 +54,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         self.check_annotations = False
         if not label_colors_json:
             label_colors = color_utils.generate_colors(self.config['out_channels'])
-            self.label_colors = torch.tensor(label_colors)
+            self.label_colors = torch.tensor(label_colors).to(device)
         else:
             label_colors = color_utils.load_color_codes(label_colors_json)
             ids = [d['id'] for d in label_colors]
@@ -143,11 +152,18 @@ class Pix2Pix(SegmentationEngine):
         self.l1 = nn.L1Loss()
         self.ce = nn.CrossEntropyLoss()
         self.dice = MulticlassDiceLoss(num_classes=self.config['out_channels'])
-        self.val_optimizer_idx = 2
+        self.val_optimizer_idx = 3
+        obj_label_colors = color_utils.generate_colors(self.config['max_num_objects'])
+        self.obj_label_colors = torch.tensor(obj_label_colors).to(device)
 
     def build_network(self):
         gen_in_channels = self.config['in_channels']
-        gen_out_channels = self.config['in_channels'] + self.config['out_channels']
+        #gen_out_channels = self.config['in_channels'] + self.config['out_channels']
+        # add 1 for background
+        gen_out_channels = \
+            self.config['in_channels'] + \
+            self.config['out_channels'] + \
+            self.config['max_num_objects']
         self.gen = Generator(
             gen_in_channels,
             features=self.config['gen_features'],
@@ -170,12 +186,44 @@ class Pix2Pix(SegmentationEngine):
         opt_g = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
         opt_d = torch.optim.Adam(self.disc.parameters(), lr=self.lr, betas=(b1, b2))
         opt_a = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
+        opt_o = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
         # Use the below lines if trying with annotation loss
-        self.loss_names = ['d_loss', 'g_loss', 'a_loss']
-        return [opt_d, opt_g, opt_a], []
+        self.loss_names = ['d_loss', 'g_loss', 'o_loss', 'a_loss']
+        return [opt_d, opt_g, opt_o, opt_a], []
         # Use the commented lines if not doing annotation loss
         #self.loss_names = ['d_loss', 'g_loss']
         #return [opt_d, opt_g], []
+
+    def annotation_loss(self, x, y_preds_logits, y_fake_probs, gt_index, n_frames):
+        G_loss = 0
+        for i in range(n_frames):
+            D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
+            G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
+            if self.config.get('use_focal_loss', False):
+                L2 = focal_loss(
+                    y_preds_logits[i].unsqueeze(0),
+                    gt_index[i].unsqueeze(0),
+                    alpha=self.config['focal_alpha'], gamma=self.config['focal_gamma'])
+            elif self.config.get('use_dice_loss', False):
+                L2 = self.dice(
+                    y_preds_logits[i].unsqueeze(0), gt_index[i].unsqueeze(0), dim=1)
+            else:
+                L2 = self.ce(y_preds_logits[i], gt_index[i].reshape(-1))
+            G_loss += G_fake_loss + L2 * self.config['l2_lambda']
+            # G_loss += L2
+        G_loss /= n_frames
+        return G_loss
+
+    def object_loss(self, gt_obj_masks_padded, y_preds_obj_sigmoid, n_frames):
+        O_loss = 0
+        for i in range(n_frames):
+            gt_obj_mask = gt_obj_masks_padded[i].unsqueeze(0).view(
+                1, self.config['max_num_objects'], -1)
+            y_pred_obj_sigmoid = y_preds_obj_sigmoid[i].unsqueeze(0).view(
+                1, self.config['max_num_objects'], -1)
+            O_loss += hungarian_loss(gt_obj_mask.float(), y_pred_obj_sigmoid)
+        O_loss /= n_frames
+        return O_loss
 
     def forward(self, batch, compute_loss=False, optimizer_idx=0):
         x = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
@@ -185,15 +233,27 @@ class Pix2Pix(SegmentationEngine):
         y_fake_logits = self.gen(x_patches)
         y_fake_logits = image_utils.patches_to_image_tensors(y_fake_logits, x_coords)
         y_fake_probs = [torch.tanh(logits) for logits in y_fake_logits]
-        y_preds_logits = [y_fake[self.config['in_channels']:, :, :] for y_fake in y_fake_logits]
-        y_fake_probs = [y_fake[:self.config['in_channels'], :, :] for y_fake in y_fake_probs]
-        #y_preds = image_utils.patches_to_image_tensors(y_preds, x_coords)
-        #y_fake = image_utils.patches_to_image_tensors(y_fake, x_coords)
+        i_in = self.config['in_channels']
+        i_anno = i_in +self.config['out_channels']
+        y_preds_logits = [y_fake[i_in:i_anno, :, :] for y_fake in y_fake_logits]
+        # Use sigmoid if we want to generate a probability map as region proposals,
+        # instead of softmax normalizing across dimensions.
+        y_preds_obj_sigmoid = [torch.sigmoid(y_fake[i_anno:, :, :]) for y_fake in y_fake_logits]
+        y_fake_gen_probs = [y_fake[:self.config['in_channels'], :, :] for y_fake in y_fake_probs]
         if compute_loss:
             gts =  flatten_list(batch['gt_frames'])
             gt_imgs = [self.label_colors[self.color_index[gt.to(device)]] for gt in gts]
             gt_imgs = [gt_img.permute(2,0,1).float()/255 for gt_img in gt_imgs]
             gt_index = [self.color_index[gt.to(device)] for gt in gts]
+            gt_obj_masks = flatten_list(batch['gt_masks'])
+            gt_obj_masks_padded = [pad_or_crop_obj_mask(
+                mask, self.config['max_num_objects'])  for mask in gt_obj_masks]
+            #gt_obj_masks = [torch.cat(
+            #    (torch.zeros_like(mask), mask), dim=0) for mask in gt_obj_masks]
+            #gt_obj_index = [mask.argmax(axis=0) for mask in gt_obj_masks]
+            #gt_obj_imgs = [
+            #    self.obj_label_colors[gt_idx.to(device)] for gt_idx in gt_obj_index]
+            #gt_obj_imgs = [gt_img.permute(2, 0, 1).float() / 255 for gt_img in gt_obj_imgs]
             #gt_onehot = [F.one_hot(
             #    gt_idx, num_classes=self.config['out_channels']) for gt_idx in gt_index]
             #gt_onehot = [_gt.permute(2, 0, 1).float() for _gt in gt_onehot]
@@ -202,45 +262,32 @@ class Pix2Pix(SegmentationEngine):
                 for i in range(n_frames):
                     x[i] = x[i].to(device)
                     D_real = self.disc(x[i].unsqueeze(0), gt_imgs[i].unsqueeze(0))
-                    D_fake = self.disc(x[i].unsqueeze(0), y_fake_probs[i].detach().unsqueeze(0))
+                    D_fake = self.disc(x[i].unsqueeze(0), y_fake_gen_probs[i].detach().unsqueeze(0))
                     D_real_loss = self.mse(D_real, torch.ones_like(D_real))
                     D_fake_loss = self.mse(D_fake, torch.zeros_like(D_fake))
                     D_loss += (D_real_loss + D_fake_loss) / 2
                 D_loss /= n_frames
-                return y_fake_probs, y_preds_logits, D_loss
+                return y_fake_gen_probs, y_preds_logits, D_loss
             if optimizer_idx == 1:
                 # generator loss
                 G_loss = 0
                 for i in range(n_frames):
-                    D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
+                    D_fake = self.disc(
+                        x[i].to(device).unsqueeze(0), y_fake_gen_probs[i].unsqueeze(0))
                     G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
-                    L1 = self.l1(y_fake_probs[i], gt_imgs[i]) * self.config['l1_lambda']
+                    L1 = self.l1(y_fake_gen_probs[i], gt_imgs[i]) * self.config['l1_lambda']
                     G_loss += G_fake_loss + L1
                 G_loss /= n_frames
-                return y_fake_probs, y_preds_logits, G_loss
+                return y_fake_gen_probs, y_preds_logits, G_loss
             if optimizer_idx == 2:
-                G_loss = 0
-                for i in range(n_frames):
-                    D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
-                    G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
-                    #y_pred_logit = y_preds_logits[i].permute(1, 2, 0).view(-1, y_preds_logits[i].shape[0])
-                    #L2 = self.mse(y_preds[i], gt_onehot[i]) * self.config['l2_lambda']
-                    if self.config.get('use_focal_loss', False):
-                        L2 = focal_loss(
-                            y_preds_logits[i].unsqueeze(0),
-                            gt_index[i].unsqueeze(0),
-                            alpha=self.config['focal_alpha'], gamma=self.config['focal_gamma'])
-                    elif self.config.get('use_dice_loss', False):
-                        L2 = self.dice(
-                            y_preds_logits[i].unsqueeze(0), gt_index[i].unsqueeze(0), dim=1)
-                    else:
-                        L2 = self.ce(y_preds_logits[i], gt_index[i].reshape(-1))
-                    G_loss += G_fake_loss + L2 * self.config['l2_lambda']
-                    #G_loss += L2
-                G_loss /= n_frames
-                return y_fake_probs, y_preds_logits, G_loss
+                G_loss = self.annotation_loss(
+                    x, y_preds_logits, y_fake_gen_probs, gt_index, n_frames)
+                return y_fake_gen_probs, y_preds_logits, G_loss
+            if optimizer_idx == 3:
+                O_loss = self.object_loss(gt_obj_masks_padded, y_preds_obj_sigmoid, n_frames)
+                return y_fake_gen_probs, y_preds_logits, O_loss
         else:
-            return y_fake_probs,  None
+            return y_fake_gen_probs, y_preds_logits,  None
 
 
 class Pix2PixMotion(SegmentationEngine):

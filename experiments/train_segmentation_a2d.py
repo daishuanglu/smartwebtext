@@ -43,6 +43,21 @@ def load_a2d_label_maps(dataset_dir, feature_dict, patch_size=(256, 256)):
     return targets
 
 
+def load_a2d_obj_mask(dataset_dir, feature_dict):
+    fids = [fid for fid in feature_dict['fids'].split(pipelines.A2D_FID_SEP)]
+    targets = []
+    for fid in fids:
+        fmat = pipelines.A2D_ANNOTATION_PATH.format(
+            root=dataset_dir, vid=feature_dict['vid'], fid=fid)
+        with h5py.File(fmat, 'r') as mat_file:
+            mat = np.array(mat_file['reMask'])
+            if len(mat.shape) == 2:
+                mat = mat[np.newaxis, :, :]
+            mat = np.array(mat).transpose(0, 2, 1)
+            targets.append(torch.from_numpy(mat).long())
+    return targets
+
+
 def main():
     config = train_utils.read_config("config/a2d_video_segmentation.yaml")
     if not config.get("skip_prep_data", False):
@@ -51,11 +66,12 @@ def main():
 
     train_vid_features = {
         'fids': (lambda x: str(x)),
-        'vid': (lambda x: str(x))
+        'vid': (lambda x: str(x)),
     }
     train_a2d_cols = {
         'frames': lambda x: load_a2d_frame_images(config['dataset_dir'], x),
-        'gt_frames': lambda x: load_a2d_label_maps(config['dataset_dir'], x)
+        'gt_frames': lambda x: load_a2d_label_maps(config['dataset_dir'], x),
+        'gt_masks': lambda x: load_a2d_obj_mask(config['dataset_dir'], x)
     }
 
     logger_dir = config.get("logger_dir", train_utils.DEFAULT_LOGGER_DIR)
