@@ -1,7 +1,5 @@
 """A collection of supporting operations."""
 import torch
-import tensorflow as tf
-
 
 #TF_FLOAT32_MAX = 3.4028235e+38
 TF_FLOAT32_MAX = 1e38
@@ -108,10 +106,10 @@ def get_row_mask_with_min_zeros(zeros_mask: torch.Tensor) -> torch.Tensor:
     Returns:
         A 2D tensor represents a row mask with a minimum number of zeros.
     """
-    counts = count_zeros_in_rows(zeros_mask)
+    counts = count_zeros_in_rows(zeros_mask).float()
     # In this step, we are replacing all zero counts with max floating
     # value, since we need this to eliminate rows filled with all zeros.
-    counts = torch.where(counts == 0, torch.tensor(TF_FLOAT32_MAX), counts)
+    counts[counts == 0] = TF_FLOAT32_MAX
     return torch.argsort(torch.argsort(counts, dim=0, descending=False), dim=0) == 0
 
 
@@ -179,10 +177,10 @@ def get_col_mask_with_min_zeros(zeros_mask) -> torch.Tensor:
     Returns:
         A 2D tensor represents a column mask with a minimum number of zeros.
     """
-    counts = count_zeros_in_cols(zeros_mask)
+    counts = count_zeros_in_cols(zeros_mask).float()
     # In this step, we are replacing all zero counts with max floating
     # value, since we need this to eliminate columns filled with all zeros.
-    counts = torch.where(counts == 0, TF_FLOAT32_MAX, counts)
+    counts[counts == 0] = TF_FLOAT32_MAX
     return torch.argsort(torch.argsort(counts, dim=1, descending=False), dim=1) == 0
 
 
@@ -251,8 +249,8 @@ def expand_item_mask(item_mask: torch.Tensor) -> torch.Tensor:
         A 2D tensor [rows, columns] for the expanded row or column mask.
     """
     row_number, col_number = item_mask.shape
-    ref_tensor = torch.zeros(col_number, col_number) if row_number == 1 else torch.zeros(
-        row_number, row_number)
+    ref_tensor = torch.zeros(col_number, col_number).to(item_mask.device) \
+        if row_number == 1 else torch.zeros(row_number, row_number).to(item_mask.device)
     return (item_mask + ref_tensor).bool()
 
 if __name__ == '__main__':

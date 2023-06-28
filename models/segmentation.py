@@ -223,7 +223,7 @@ class Pix2Pix(SegmentationEngine):
                 1, self.config['max_num_objects'], -1)
             O_loss += hungarian_loss(gt_obj_mask.float(), y_pred_obj_sigmoid)
         O_loss /= n_frames
-        return O_loss
+        return O_loss * self.config['l2_lambda']
 
     def forward(self, batch, compute_loss=False, optimizer_idx=0):
         x = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
@@ -247,7 +247,7 @@ class Pix2Pix(SegmentationEngine):
             gt_index = [self.color_index[gt.to(device)] for gt in gts]
             gt_obj_masks = flatten_list(batch['gt_masks'])
             gt_obj_masks_padded = [pad_or_crop_obj_mask(
-                mask, self.config['max_num_objects'])  for mask in gt_obj_masks]
+                mask, self.config['max_num_objects']).to(device) for mask in gt_obj_masks]
             #gt_obj_masks = [torch.cat(
             #    (torch.zeros_like(mask), mask), dim=0) for mask in gt_obj_masks]
             #gt_obj_index = [mask.argmax(axis=0) for mask in gt_obj_masks]

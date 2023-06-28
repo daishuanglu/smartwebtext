@@ -155,8 +155,8 @@ def scratch_matrix(matrix):
 
     num_of_rows, num_of_cols = matrix.shape
     zeros_mask = matrix == 0
-    scratched_rows_mask = torch.zeros(num_of_rows, 1).bool()
-    scratched_cols_mask = torch.zeros(1, num_of_cols).bool()
+    scratched_rows_mask = torch.zeros(num_of_rows, 1).bool().to(matrix.device)
+    scratched_cols_mask = torch.zeros(1, num_of_cols).bool().to(matrix.device)
     while zeros_mask.any():
         zeros_mask, scratched_rows_mask, scratched_cols_mask = body(
             zeros_mask, scratched_rows_mask, scratched_cols_mask)
@@ -326,8 +326,8 @@ def reduce_matrix(matrix):
 
     num_of_rows, num_of_cols = matrix.shape
     reduced_matrix = matrix
-    scratched_rows_mask = torch.zeros(num_of_rows, 1).bool()
-    scratched_cols_mask = torch.zeros(1, num_of_cols).bool()
+    scratched_rows_mask = torch.zeros(num_of_rows, 1).bool().to(matrix.device)
+    scratched_cols_mask = torch.zeros(1, num_of_cols).bool().to(matrix.device)
     while is_optimal_assignment(
             scratched_rows_mask, scratched_cols_mask).logical_not():
         reduced_matrix, scratched_rows_mask, scratched_cols_mask = body(reduced_matrix)
@@ -592,7 +592,7 @@ def hungarian_loss(
         cost = cost.view(n, n)
         return (cost * select_optimal_assignment_mask(reduce_matrix(cost))).mean()
 
-    losses = torch.zeros(y_true.shape[0])
+    losses = torch.zeros(y_true.shape[0]).to(y_true.device)
     # loop over batch elements pairs
     for i, (xt, xp) in enumerate(zip(y_true, y_pred)):
         losses[i] += compute_sample_loss(xt, xp)
