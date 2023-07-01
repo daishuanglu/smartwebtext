@@ -6,7 +6,8 @@ import torch.nn as nn
 from modules import ops
 
 
-def compute_euclidean_distance(a: torch.tensor, b: torch.tensor):  # pylint: disable=invalid-name
+def compute_euclidean_distance(
+        a: torch.tensor, b: torch.tensor, focal=False, alpha=0.5, gamma=2.0):  # pylint: disable=invalid-name
     """
     Computes euclidean distance between two inputs `a` and `b`.
 
@@ -40,8 +41,12 @@ def compute_euclidean_distance(a: torch.tensor, b: torch.tensor):  # pylint: dis
     """
     a2 = torch.sum(a ** 2, dim=1).view(-1, 1)
     b2 = torch.sum(b ** 2, dim=1).view(1, -1)
-    dist = (a2 - 2 * torch.matmul(a, b.T) + b2) ** 0.5
-    return dist
+    dist = (a2 - 2 * torch.matmul(a, b.T) + b2)
+    if focal:
+        pt = torch.exp(-dist)
+        focal_dist = (alpha * (1 - pt) ** gamma * dist)
+        return focal_dist
+    return dist ** 0.5
 
 
 def reduce_rows(matrix: torch.Tensor) -> torch.Tensor:

@@ -31,7 +31,7 @@ def load_a2d_frame_images(dataset_dir, feature_dict, patch_size=(256,256)):
     return samples
 
 
-def load_a2d_label_maps(dataset_dir, feature_dict, patch_size=(256, 256)):
+def load_a2d_label_maps(dataset_dir, feature_dict):
     fids = [fid for fid in feature_dict['fids'].split(pipelines.A2D_FID_SEP)]
     targets = []
     for fid in fids:

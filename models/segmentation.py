@@ -8,15 +8,13 @@ import re
 import os
 import itertools
 import random
-
-import torch
-
 from utils.train_utils import device
 from utils import color_utils
 from utils import image_utils
 from modules.layers import *
 from modules.losses import *
-from modules.hungarian import hungarian_loss
+from modules.hungarian import hungarian_loss, compute_euclidean_distance
+#from modules.ops import pairwise_mask_iou_dice
 from thin_plate_spline_motion_model.modules.util import *
 from thin_plate_spline_motion_model.modules import keypoint_detector, bg_motion_predictor
 
@@ -107,7 +105,8 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         return prediction_file_paths
 
     def validation_step(self, batch, batch_nb, optimizer_idx=1):
-        outputs, logits, loss = self(batch, compute_loss=True, optimizer_idx=self.val_optimizer_idx)
+        outputs, logits, loss = self(
+            batch, compute_loss=True, optimizer_idx=self.val_optimizer_idx)
         outputs = logits if self.check_annotations else outputs
         loss = loss.item()
         if self.predictions_fstr is not None:
@@ -155,15 +154,16 @@ class Pix2Pix(SegmentationEngine):
         self.val_optimizer_idx = 3
         obj_label_colors = color_utils.generate_colors(self.config['max_num_objects'])
         self.obj_label_colors = torch.tensor(obj_label_colors).to(device)
+        self.focal_dist_fn = lambda a, b: compute_euclidean_distance(
+            a, b, focal=True, alpha=self.config['focal_alpha'], gamma=self.config['focal_gamma'])
 
     def build_network(self):
         gen_in_channels = self.config['in_channels']
         #gen_out_channels = self.config['in_channels'] + self.config['out_channels']
         # add 1 for background
         gen_out_channels = \
-            self.config['in_channels'] + \
-            self.config['out_channels'] + \
-            self.config['max_num_objects']
+            self.config['in_channels'] + self.config['max_num_objects']
+            #self.config['out_channels'] + \
         self.gen = Generator(
             gen_in_channels,
             features=self.config['gen_features'],
@@ -188,8 +188,8 @@ class Pix2Pix(SegmentationEngine):
         opt_a = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
         opt_o = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
         # Use the below lines if trying with annotation loss
-        self.loss_names = ['d_loss', 'g_loss', 'o_loss', 'a_loss']
-        return [opt_d, opt_g, opt_o, opt_a], []
+        self.loss_names = ['d_loss', 'g_loss', 'iou_loss']
+        return [opt_d, opt_g, opt_o], []
         # Use the commented lines if not doing annotation loss
         #self.loss_names = ['d_loss', 'g_loss']
         #return [opt_d, opt_g], []
@@ -214,16 +214,20 @@ class Pix2Pix(SegmentationEngine):
         G_loss /= n_frames
         return G_loss
 
-    def object_loss(self, gt_obj_masks_padded, y_preds_obj_sigmoid, n_frames):
-        O_loss = 0
+    def object_loss(self, x, y_fake_probs, gt_obj_masks_padded, y_preds_obj_sigmoid, n_frames):
+        G_loss = 0
         for i in range(n_frames):
-            gt_obj_mask = gt_obj_masks_padded[i].unsqueeze(0).view(
-                1, self.config['max_num_objects'], -1)
-            y_pred_obj_sigmoid = y_preds_obj_sigmoid[i].unsqueeze(0).view(
-                1, self.config['max_num_objects'], -1)
-            O_loss += hungarian_loss(gt_obj_mask.float(), y_pred_obj_sigmoid)
-        O_loss /= n_frames
-        return O_loss * self.config['l2_lambda']
+            #D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
+            #G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
+            gt_obj_mask = gt_obj_masks_padded[i].unsqueeze(0).view(1, self.config['max_num_objects'], -1)
+            y_pred_obj_sigmoid = y_preds_obj_sigmoid[i].unsqueeze(0).view(1, self.config['max_num_objects'], -1)
+            O_loss = hungarian_loss(
+                gt_obj_mask.float(), y_pred_obj_sigmoid, self.focal_dist_fn
+            ) * self.config['l2_lambda']
+            #G_loss += G_fake_loss + O_loss
+            G_loss += O_loss
+        G_loss /= n_frames
+        return G_loss
 
     def forward(self, batch, compute_loss=False, optimizer_idx=0):
         x = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
@@ -234,11 +238,12 @@ class Pix2Pix(SegmentationEngine):
         y_fake_logits = image_utils.patches_to_image_tensors(y_fake_logits, x_coords)
         y_fake_probs = [torch.tanh(logits) for logits in y_fake_logits]
         i_in = self.config['in_channels']
-        i_anno = i_in +self.config['out_channels']
-        y_preds_logits = [y_fake[i_in:i_anno, :, :] for y_fake in y_fake_logits]
+        #i_anno = i_in +self.config['out_channels']
+        #y_preds_logits = [y_fake[i_in:i_anno, :, :] for y_fake in y_fake_logits]
         # Use sigmoid if we want to generate a probability map as region proposals,
         # instead of softmax normalizing across dimensions.
-        y_preds_obj_sigmoid = [torch.sigmoid(y_fake[i_anno:, :, :]) for y_fake in y_fake_logits]
+        y_preds_logits = [y_fake[i_in:, :, :] for y_fake in y_fake_logits]
+        y_preds_obj_sigmoid = [torch.sigmoid(y_fake[i_in:, :, :]) for y_fake in y_fake_logits]
         y_fake_gen_probs = [y_fake[:self.config['in_channels'], :, :] for y_fake in y_fake_probs]
         if compute_loss:
             gts =  flatten_list(batch['gt_frames'])
@@ -279,13 +284,14 @@ class Pix2Pix(SegmentationEngine):
                     G_loss += G_fake_loss + L1
                 G_loss /= n_frames
                 return y_fake_gen_probs, y_preds_logits, G_loss
-            if optimizer_idx == 2:
+            if optimizer_idx == 3:
                 G_loss = self.annotation_loss(
                     x, y_preds_logits, y_fake_gen_probs, gt_index, n_frames)
                 return y_fake_gen_probs, y_preds_logits, G_loss
-            if optimizer_idx == 3:
-                O_loss = self.object_loss(gt_obj_masks_padded, y_preds_obj_sigmoid, n_frames)
-                return y_fake_gen_probs, y_preds_logits, O_loss
+            if optimizer_idx == 2:
+                G_loss = self.object_loss(
+                    x, y_fake_gen_probs, gt_obj_masks_padded, y_preds_obj_sigmoid, n_frames)
+                return y_fake_gen_probs, y_preds_logits, G_loss
         else:
             return y_fake_gen_probs, y_preds_logits,  None
 
