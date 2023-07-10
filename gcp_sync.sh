@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eux
 fdir=${2:-"smartwebtext"}
-IP="34.105.0.8"
+IP="34.145.45.201"
 a="code"
 b="prnews"
 c="fasttext"
@@ -35,6 +35,7 @@ then
   scp -r models shuangludai@$IP:/home/shuangludai/$fdir
   scp -r preprocessors shuangludai@$IP:/home/shuangludai/$fdir
   scp -r experiments shuangludai@$IP:/home/shuangludai/$fdir
+  scp -r evaluators shuangludai@$IP:/home/shuangludai/$fdir
   scp requirements.txt shuangludai@$IP:/home/shuangludai/$fdir
   scp envrc.sh shuangludai@$IP:/home/shuangludai/$fdir
   #scp -r config shuangludai@$IP:/home/shuangludai/$fdir

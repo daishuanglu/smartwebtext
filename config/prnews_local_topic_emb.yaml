@@ -1,8 +1,8 @@
 model_name: 'prnews_local_topic_emb'
 logger_dir: 'lightning_logs'
-skip_prep_data: False
-train_data_path: "data_model/prnews_topic_emb_training.csv"
-val_data_path: "data_model/prnews_topic_emb_validation.csv"
+skip_prep_data: True
+train_data_path: "data_model/prnews_local_topic_emb_training.csv"
+val_data_path: "data_model/prnews_local_topic_emb_validation.csv"
 train_val_split_ratio: [0.98, 0.02]
 text_col: "Text"
 ref_col: "Company"

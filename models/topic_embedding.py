@@ -72,9 +72,9 @@ class ProdLDA(nn.Module):
         NL  = -(input * (recon+1e-10).log()).sum(1)
         # KLD, see Section 3.3 of Akash Srivastava and Charles Sutton, 2017,
         # https://arxiv.org/pdf/1703.01488.pdf
-        prior_mean   = Variable(self.prior_mean).expand_as(posterior_mean)
-        prior_var    = Variable(self.prior_var).expand_as(posterior_mean)
-        prior_logvar = Variable(self.prior_logvar).expand_as(posterior_mean)
+        prior_mean   = Variable(self.prior_mean).expand_as(posterior_mean).to(input.device)
+        prior_var    = Variable(self.prior_var).expand_as(posterior_mean).to(input.device)
+        prior_logvar = Variable(self.prior_logvar).expand_as(posterior_mean).to(input.device)
         var_division    = posterior_var  / prior_var
         diff            = posterior_mean - prior_mean
         diff_term       = diff * diff / prior_var
@@ -138,7 +138,6 @@ class GlobalTopicAsEmbedding(ptl.LightningModule, ABC):
         log = {f'{loss_type}_perp': loss.item()}
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
         return loss
-
 
 
 class CondProdLDA(nn.Module):

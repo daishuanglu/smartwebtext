@@ -13,8 +13,7 @@ from utils import color_utils
 from utils import image_utils
 from modules.layers import *
 from modules.losses import *
-from modules.hungarian import hungarian_loss, compute_euclidean_distance
-#from modules.ops import pairwise_mask_iou_dice
+from modules import hungarian
 from thin_plate_spline_motion_model.modules.util import *
 from thin_plate_spline_motion_model.modules import keypoint_detector, bg_motion_predictor
 
@@ -154,8 +153,8 @@ class Pix2Pix(SegmentationEngine):
         self.val_optimizer_idx = 3
         obj_label_colors = color_utils.generate_colors(self.config['max_num_objects'])
         self.obj_label_colors = torch.tensor(obj_label_colors).to(device)
-        self.focal_dist_fn = lambda a, b: compute_euclidean_distance(
-            a, b, focal=True, alpha=self.config['focal_alpha'], gamma=self.config['focal_gamma'])
+        self.focal_dist_fn = lambda a, b: hungarian.compute_pairwise_focal_bce(
+            a, b, alpha=self.config['focal_alpha'], gamma=self.config['focal_gamma'])
 
     def build_network(self):
         gen_in_channels = self.config['in_channels']
@@ -219,9 +218,11 @@ class Pix2Pix(SegmentationEngine):
         for i in range(n_frames):
             #D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
             #G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
-            gt_obj_mask = gt_obj_masks_padded[i].unsqueeze(0).view(1, self.config['max_num_objects'], -1)
-            y_pred_obj_sigmoid = y_preds_obj_sigmoid[i].unsqueeze(0).view(1, self.config['max_num_objects'], -1)
-            O_loss = hungarian_loss(
+            gt_obj_mask = gt_obj_masks_padded[i].unsqueeze(0)
+                #.view(1, self.config['max_num_objects'], -1)
+            y_pred_obj_sigmoid = y_preds_obj_sigmoid[i].unsqueeze(0)
+                #.view(1, self.config['max_num_objects'], -1)
+            O_loss = hungarian.hungarian_loss(
                 gt_obj_mask.float(), y_pred_obj_sigmoid, self.focal_dist_fn
             ) * self.config['l2_lambda']
             #G_loss += G_fake_loss + O_loss

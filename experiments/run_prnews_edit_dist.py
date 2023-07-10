@@ -12,7 +12,7 @@ MODE_NAME = 'val'
 
 
 def get_kw_edit_sim_dataset(src_df, keywords, comp=None):
-    nwords=len(keywords)
+    keywords = [kw.lower() for kw in keywords]
     src_df_ = src_df.copy() if comp is None else\
             src_df[src_df['Company'].isin(comp)]
     comp_list=src_df_['Company'].unique().tolist()
@@ -21,16 +21,16 @@ def get_kw_edit_sim_dataset(src_df, keywords, comp=None):
     sentences = [['' for _ in range(len(comp_list))] for _ in range(len(keywords))]
     haskw=np.zeros((len(comp_list),len(keywords)))
     start_time=time.time()
-    for ii,(t,c) in enumerate(zip(src_df_['Title']+' '+src_df_['Text'], src_df_['Company'])):
-        t=str(t).lower()
-        ic=comp_list.index(c)
-        haskw[ic,:]=np.logical_or(haskw[ic,:], [kw in t for kw in keywords])
-        s=[max([damerauLevenshtein(w,kw,similarity=True) \
-                for w in t.split()]) for kw in keywords]
-        for j in range(nwords):
+    for ii,(context,company) in enumerate(zip(src_df_['Title']+' '+src_df_['Text'], src_df_['Company'])):
+        context = str(context).lower()
+        ic=comp_list.index(company)
+        haskw[ic,:]=np.logical_or(haskw[ic,:], [kw in context for kw in keywords])
+        s = [max([damerauLevenshtein(
+            w,kw,similarity=True) for w in context.split()]) for kw in keywords]
+        for j in range(len(keywords)):
             if s[j]>scores[j,ic]:
                 scores[j,ic]=s[j]
-                sentences[j][ic] = t
+                sentences[j][ic] = context
         if (ii+1) % 10000 ==0:
             print(ii+1,len(src_df_),int(time.time()-start_time),' secs.')
     df_sent = pd.DataFrame(sentences, index=['edit_sim_sent:'+w for w in keywords]).T

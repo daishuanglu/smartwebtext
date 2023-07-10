@@ -73,7 +73,7 @@ def training_pipeline(
     checkpoint_callback = ModelCheckpoint(
         monitor = monitor,
         dirpath = logger_path,
-        filename = ('%s-epoch{epoch:02d}-val_loss{val_loss:.2f}' % model_name),
+        filename = ('%s-epoch{epoch:02d}-%s{%s:.2f}' % (model_name, monitor, monitor)),
         auto_insert_metric_name = False,
         mode='min'
     )

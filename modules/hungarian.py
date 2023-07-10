@@ -6,8 +6,20 @@ import torch.nn as nn
 from modules import ops
 
 
+def compute_pairwise_focal_bce(y_true, y_pred, alpha=0.5, gamma=2.0):
+    # p - n*w*h
+    # y - n*w*h
+    # return: n*n pairwise cost matrix
+    p = y_pred.view(y_pred.size(0), -1)
+    y = y_true.view(y_true.size(0), -1)
+    loss = -(torch.matmul(y, torch.log(p).T) + torch.matmul(1- y, torch.log(1 - p).T))
+    pt = torch.exp(-loss)
+    focal_dist = (alpha * (1 - pt) ** gamma * loss)
+    return focal_dist
+
+
 def compute_euclidean_distance(
-        a: torch.tensor, b: torch.tensor, focal=False, alpha=0.5, gamma=2.0):  # pylint: disable=invalid-name
+        a: torch.tensor, b: torch.tensor):  # pylint: disable=invalid-name
     """
     Computes euclidean distance between two inputs `a` and `b`.
 
@@ -39,13 +51,11 @@ def compute_euclidean_distance(
         The 2D tensor [num_entities, num_entities] with computed
         distances between entities.
     """
+    a = a.view(a.size(0), -1)
+    b = b.view(b.size(0), -1)
     a2 = torch.sum(a ** 2, dim=1).view(-1, 1)
     b2 = torch.sum(b ** 2, dim=1).view(1, -1)
     dist = (a2 - 2 * torch.matmul(a, b.T) + b2)
-    if focal:
-        pt = torch.exp(-dist)
-        focal_dist = (alpha * (1 - pt) ** gamma * dist)
-        return focal_dist
     return dist ** 0.5
 
 
@@ -422,133 +432,6 @@ def select_optimal_assignment_mask(reduced_matrix):
     return selection_mask
 
 
-class HungarianLoss(nn.Module):
-    """
-    Computes the Hungarian loss between `y_true` and `y_pred`.
-
-    For example, if we are detecting 10  bounding boxes on a batch
-    of 32 images, the  `y_true` and `y_pred` will represent 32 images
-    where each image is represented by 10 bounding boxes and each
-    bounding box is represented by 4  (x,y,w,h) coordinates. This
-    gives us the final shape of  `y_true` and `y_pred` `(32, 10, 4)`.
-
-    Example:
-        >>> def rmse(y_true, y_pred):
-        >>>     return torch.sqrt(nn.MSELoss()(y_pred, y_true))
-        >>> y_true = torch.tensor(
-        >>>     [
-        >>>         [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]],
-        >>>         [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]],
-        >>>     ]
-        >>> )
-        >>> y_pred = torch.tensor(
-        >>>     [
-        >>>         [[1.0, 1.0, 1.0, 1.0], [2.0, 2.0, 2.0, 2.0]],
-        >>>         [[1.0, 1.0, 1.0, 1.0], [2.0, 2.0, 2.0, 2.0]],
-        >>>     ]
-        >>> )
-        >>> HungarianLoss(
-        >>>    [4], 0, compute_euclidean_distance, [rmse], [1.0]
-        >>> )
-
-        >>> torch.Tensor([3.254 3.254], shape=(2,), dtype=float32)
-
-    Args:
-        slice_sizes:
-            The list of slice sizes for fragmenting input `y_true` and
-            `y_pred`.
-        slice_index_to_compute_assignment:
-            The slice index used for computing the cost matrix and performing
-            the optimal assignment.
-        compute_cost_matrix_fn:
-            The function for computing the cost matrix.
-        slice_losses_fn:
-            The list of loss functions for computing loss in each slice.
-        slice_weights:
-            The list of weights applying to each slice loss.
-    """
-
-    def __init__(
-        self,
-        slice_sizes: list,
-        slice_index_to_compute_assignment: int = 0,
-        compute_cost_matrix_fn: object = compute_euclidean_distance,
-        slice_losses_fn: list = None
-    ):
-        super().__init__()
-        if slice_sizes is None:
-            raise TypeError(
-                "The slice_sizes must be a <class 'list'>, but got None;"
-            )
-        if len(slice_sizes) == 0:
-            raise ValueError(
-                "The slice_sizes must be containing at least one element, "
-                "but got 0;"
-            )
-        if slice_index_to_compute_assignment >= len(slice_sizes):
-            raise ValueError(
-                "The slice_index_to_compute_assignment must be less than "
-                f"a length of the slice_sizes but got "
-                f"idx({slice_index_to_compute_assignment})>="
-                f"len({len(slice_sizes)});"
-            )
-        self.slice_sizes = slice_sizes
-        self.slice_index_to_compute_assignment = (
-            slice_index_to_compute_assignment
-        )
-        self.compute_cost_matrix_fn = compute_cost_matrix_fn
-        if slice_losses_fn:
-            self.slice_losses_fn = slice_losses_fn
-        else:
-            self.slice_losses_fn = nn.MSELoss()
-
-    def __compute_sample_loss(self, y_true, y_pred):  # pragma: no cover
-        shift = 0
-        v_trues, v_preds = [], []
-
-        for i, size in enumerate(self.slice_sizes):
-            v_true = y_true[:, shift: shift+size]
-            v_pred = y_pred[:, shift: shift+size]
-            if i == self.slice_index_to_compute_assignment:
-                cost = self.compute_cost_matrix_fn(v_true, v_pred)
-                # We need to reshape the distance matrix by removing the
-                # `None` dimension values.
-                n = cost.shape[1]
-                cost = cost.view(n, n)
-            v_trues.append(v_true)
-            v_preds.append(v_pred)
-            shift += size
-
-        assignments = select_optimal_assignment_mask(reduce_matrix(cost))
-        assigned_order = torch.nonzero(assignments)[:, 1]
-        slice_losses = 0
-        for i, (v_true, v_pred) in enumerate(zip(v_trues, v_preds)):
-            v_true_reordered = v_true[assigned_order[0]]
-            v_pred_reordered = v_pred[assigned_order[1]]
-            slice_losses += self.slice_losses_fn(v_true_reordered, v_pred_reordered)
-        return slice_losses/len(v_trues)
-
-    def forward(self, y_true, y_pred):
-        """
-        The function called to compute the Hungarian.
-
-        Args:
-            y_true:
-                The ground truth values, 3D `Tensor` of shape
-                `[batch_size, num_of_entities, num_of_quantifiers]`.
-            y_pred:
-                The predicted values, 3D `Tensor` with of shape
-                `[batch_size, num_of_entities, num_of_quantifiers]`.
-
-        Returns:
-            The predicted loss values 1D `tensor` with shape = `[batch_size]`.
-        """
-        losses = torch.zeros_like(y_true[:, 0, 0])
-        for i, (xt, xp) in enumerate(zip(y_true, y_pred)):
-            losses[i] += self.__compute_sample_loss(xt, xp)
-        return losses
-
-
 def hungarian_loss(
         y_true, y_pred, pairwise_cost_fn = compute_euclidean_distance):
     """
@@ -588,7 +471,6 @@ def hungarian_loss(
     Returns:
         The predicted loss values 1D `tensor` with shape = `[batch_size]`.
     """
-
     def compute_sample_loss(v_true, v_pred):  # pragma: no cover
         cost = pairwise_cost_fn(v_true, v_pred)
         # We need to reshape the distance matrix by removing the
@@ -615,8 +497,5 @@ if __name__ == '__main__':
     y_pred = torch.tensor(
         [[[1.0, 1.0, 1.0, 1.0], [2.0, 2.0, 2.0, 2.0]],
          [[1.0, 1.0, 1.0, 1.0], [2.0, 2.0, 2.0, 2.0]]])
-    hungarian = HungarianLoss([4], 0, compute_euclidean_distance)
-    h_loss = hungarian(y_true, y_pred)
-    print('class loss', h_loss)
     h_loss = hungarian_loss(y_true, y_pred, pairwise_cost_fn=compute_euclidean_distance)
     print('function loss', h_loss)
