@@ -3,7 +3,7 @@ import numpy as np
 from collections import defaultdict
 from sklearn.metrics import average_precision_score,precision_recall_curve
 import matplotlib.pyplot as plt
-
+from sklearn.metrics import precision_score, recall_score
 from typing import Dict, Any
 from fastDamerauLevenshtein import damerauLevenshtein
 import pandas as pd
@@ -221,20 +221,21 @@ def score(predictions, groundtruths):
     thresholds = np.linspace(0, 1, num=101)
     df_prec_rec = defaultdict(list)
     for th in thresholds:
-        pos_idx = (groundtruths == 1)
-        neg_idx = (groundtruths == 0)
-        TP = (predictions[pos_idx] > th).sum()
-        FP = (predictions[neg_idx] > th).sum()
-        num_na_positives = predictions.isna()[pos_idx].sum()
-        df_prec_rec['recall'].append(TP/ (TP + FP + num_na_positives + 1e-6))
-        # df_prec_rec['recall'].append(rec)
-        df_prec_rec['precision'].append(TP / (pos_idx.sum() + 1e-6))
+        df_prec_rec['precision'].append(precision_score(groundtruths == 1.0, predictions > th))
+        df_prec_rec['recall'].append(recall_score(groundtruths == 1.0, predictions > th))
         df_prec_rec['threshold'].append(th)
     df_prec_rec = pd.DataFrame.from_dict(df_prec_rec)
     df_prec_rec = df_prec_rec.sort_values(by=['precision', 'recall'])
     #idx = df_prec_rec.groupby('precision')['recall'].idxmax()
     df_prec_rec = df_prec_rec.drop_duplicates(subset = ['recall'], keep = 'last')
     df_prec_rec = df_prec_rec.sort_values(by='recall')
+    invalid = (df_prec_rec['precision'] == 0) & (df_prec_rec['recall'] == 0)
+    df_prec_rec = df_prec_rec[~invalid]
+    default_zero_recall = {'precision': 1.0, 'recall': 0.0, 'threshold': 1.0}
+    default_100_recall = {'precision': 0.0, 'recall': 1.0, 'threshold': -1.0}
+    df_prec_rec = pd.DataFrame(
+        [default_zero_recall], columns=df_prec_rec.columns).append(df_prec_rec, ignore_index=True)
+    df_prec_rec = df_prec_rec.append(default_100_recall, ignore_index=True)
     return df_prec_rec
 
 
@@ -282,19 +283,21 @@ if __name__=="__main__":
     index_key = 'company'
     kws = ['analytics', 'innovation', 'technology']
     prediction_files = [
-        'evaluation/prnews_accounting/local_topics_eval_predictions.csv',
-        'evaluation/prnews_accounting/global_topics_eval_predictions.csv',
-        'evaluation/prnews_accounting/edit_val_predictions.csv',
-        'evaluation/prnews_accounting/tte_sent_small_eval_predictions.csv']
+        #'evaluation/prnews_accounting/local_topics_eval_predictions.csv',
+        'evaluation/prnews_accounting/prnews_global_topic_emb_val_predictions.csv',
+        'evaluation/prnews_accounting/prnews_edit_val_predictions.csv',
+        #'evaluation/prnews_accounting/tte_sent_small_eval_predictions.csv'
+    ]
     header_mappings = [
-        {'local_topics_sim:analyt': 'local_topics_sim:analytics',
-         'local_topics_sim:innov':	'local_topics_sim:innovation',
-         'local_topics_sim:technolog': 'local_topics_sim:technology'},
+        #{'local_topics_sim:analyt': 'local_topics_sim:analytics',
+        # 'local_topics_sim:innov':	'local_topics_sim:innovation',
+        # 'local_topics_sim:technolog': 'local_topics_sim:technology'},
         {'global_topics_sim:analyt': 'global_topics_sim:analytics',
          'global_topics_sim:innov': 'global_topics_sim:innovation',
          'global_topics_sim:technolog': 'global_topics_sim:technology'},
         {'edit_sim:analytic': 'edit_sim:analytics', 'haskey:analytic': 'haskey:analytics'},
-        {'Company':'company'}]
+        #{'Company':'company'}
+    ]
     #df_gt = load_gt(GT_CSV, index_key)
     df_gt = load_MTurk(index_key)
     df_predictions = load_predictions_df(prediction_files, index_key, header_mappings)

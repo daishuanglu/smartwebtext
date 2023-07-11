@@ -82,8 +82,11 @@ def main():
             prnews_emb = model.embedding([row[config['text_col']]])
             for kw in test_keywords:
                 kw_sim = metric_utils.pw_cos_sim(kw_embeddings[kw], prnews_emb)[0,0]
-                predictions.at[c, config['model_name']+':'+kw] = (kw_sim + 1)/2
+                kw_sim = (kw_sim + 1) / 2
+                if kw_sim > predictions.at[c, config['model_name']+':'+kw]:
+                    predictions.at[c, config['model_name']+':'+kw] = kw_sim
     print(predictions)
+    predictions.index.name = 'company'
     predictions.to_csv(os.path.join(
         pipelines.PRNEWS_EVAL_DIR, '%s_val_predictions.csv' % config['model_name']))
 
