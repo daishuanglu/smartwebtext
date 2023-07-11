@@ -51,4 +51,4 @@ if __name__ == '__main__':
     df_predictions = get_kw_edit_sim_dataset(src_df, test_keywords, comp=None)
     df_predictions['tic'] = df_predictions['company'].apply(lambda x: ticker_utils.ticker_finder(x))
     df_predictions.to_csv(os.path.join(
-        pipelines.PRNEWS_EVAL_DIR, 'edit_%s_predictions.csv' % MODE_NAME), index=False)
+        pipelines.PRNEWS_EVAL_DIR, 'prnews_edit_%s_predictions.csv' % MODE_NAME), index=False)

@@ -199,9 +199,9 @@ class CondProdLDA(nn.Module):
         NL  = -(input * (recon+1e-10).log()).sum(1)
         # KLD, see Section 3.3 of Akash Srivastava and Charles Sutton, 2017,
         # https://arxiv.org/pdf/1703.01488.pdf
-        prior_mean   = Variable(self.prior_mean).expand_as(posterior_mean)
-        prior_var    = Variable(self.prior_var).expand_as(posterior_mean)
-        prior_logvar = Variable(self.prior_logvar).expand_as(posterior_mean)
+        prior_mean   = Variable(self.prior_mean).expand_as(posterior_mean).to(input.device)
+        prior_var    = Variable(self.prior_var).expand_as(posterior_mean).to(input.device)
+        prior_logvar = Variable(self.prior_logvar).expand_as(posterior_mean).to(input.device)
         var_division    = posterior_var  / prior_var
         diff            = posterior_mean - prior_mean
         diff_term       = diff * diff / prior_var
@@ -259,8 +259,8 @@ class LocalTopicAsEmbedding(ptl.LightningModule, ABC):
             return_tensors='pt',
             padding=True, truncation=True,
             max_length=self.config['max_ref_length'])
-        ref_emb = self.cond_var_embedding(ref_tok['input_ids'])
-        ref_emb = mean_pooling(ref_emb, ref_tok['attention_mask'])
+        ref_emb = self.cond_var_embedding(ref_tok['input_ids'].to(train_utils.device))
+        ref_emb = mean_pooling(ref_emb, ref_tok['attention_mask'].to(train_utils.device))
         tok_ids_count = self.doc_tok_ids_count(batch[self.config['text_col']])
         return self.vae(tok_ids_count, ref_emb, compute_loss, avg_loss)
 

@@ -74,14 +74,14 @@ def main():
         columns=[config['model_name']+':'+kw for kw in test_keywords],
         index=companies)
     predictions = predictions.fillna(0)
-    for c in companies:
-        df_val_c = df_val[df_val[config['ref_col']==c]]
-        for _, row in tqdm(df_val_c.iterrows(), total=len(df_val), desc='validation prediction %s' % c):
+    for c in tqdm(companies,
+                  desc='validation prediction %d companies' % len(companies)):
+        df_val_c = df_val[df_val[config['ref_col']]==c]
+        for _, row in df_val_c.iterrows():
             prnews_emb = model.embedding([row[config['text_col']]])
             for kw in test_keywords:
                 kw_sim = metric_utils.pw_cos_sim(kw_embeddings[kw], prnews_emb)[0,0]
-                if kw_sim > predictions.loc[c][config['model_name']+':'+kw]:
-                    predictions.loc[c][config['model_name']+':'+kw] = kw_sim
+                predictions.loc[c][config['model_name']+':'+kw] = (kw_sim + 1)/2
     predictions.to_csv(os.path.join(
         pipelines.PRNEWS_EVAL_DIR, '%s_val_predictions.csv' % config['model_name']))
 

@@ -77,7 +77,7 @@ def main():
         for kw in test_keywords:
             kw_sim = metric_utils.pw_cos_sim(kw_embeddings[kw], cond_prnews_emb)
             scores = kw_sim.max(axis=1)
-            predictions[config['model_name']+':'+kw] = scores
+            predictions[config['model_name']+':'+kw] = (scores + 1)/2
     predictions.to_csv(os.path.join(
         pipelines.PRNEWS_EVAL_DIR, '%s_val_predictions.csv' % config['model_name']))
 
