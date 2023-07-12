@@ -1,4 +1,3 @@
-
 import numpy as np
 from collections import defaultdict
 from sklearn.metrics import average_precision_score,precision_recall_curve
@@ -283,22 +282,21 @@ if __name__=="__main__":
     index_key = 'company'
     kws = ['analytics', 'innovation', 'technology']
     prediction_files = [
-        #'evaluation/prnews_accounting/local_topics_eval_predictions.csv',
+        'evaluation/prnews_accounting/prnews_local_topic_emb_val_predictions.csv',
         'evaluation/prnews_accounting/prnews_global_topic_emb_val_predictions.csv',
         'evaluation/prnews_accounting/prnews_edit_val_predictions.csv',
         #'evaluation/prnews_accounting/tte_sent_small_eval_predictions.csv'
     ]
     header_mappings = [
-        #{'local_topics_sim:analyt': 'local_topics_sim:analytics',
-        # 'local_topics_sim:innov':	'local_topics_sim:innovation',
-        # 'local_topics_sim:technolog': 'local_topics_sim:technology'},
+        {'local_topics_sim:analyt': 'local_topics_sim:analytics',
+         'local_topics_sim:innov':	'local_topics_sim:innovation',
+         'local_topics_sim:technolog': 'local_topics_sim:technology'},
         {'global_topics_sim:analyt': 'global_topics_sim:analytics',
          'global_topics_sim:innov': 'global_topics_sim:innovation',
          'global_topics_sim:technolog': 'global_topics_sim:technology'},
         {'edit_sim:analytic': 'edit_sim:analytics', 'haskey:analytic': 'haskey:analytics'},
         #{'Company':'company'}
     ]
-    #df_gt = load_gt(GT_CSV, index_key)
     df_gt = load_MTurk(index_key)
     df_predictions = load_predictions_df(prediction_files, index_key, header_mappings)
     methods = sorted(set([col.split(':')[0] for col in df_predictions.columns]))

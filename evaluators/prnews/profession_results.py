@@ -1,5 +1,10 @@
+from collections import defaultdict
+import numpy as np
 import pandas as pd
 from fastDamerauLevenshtein import damerauLevenshtein
+from dateutil.parser import parse
+import matplotlib.pyplot as plt
+from evaluators.prnews.renderTurk import load_gt, load_predictions_df
 
 
 def label2searchkw(ml_col, gt_col):
@@ -32,21 +37,69 @@ def thresholded_precision(prediction_file, kws, th=0.5):
 
     return results
 
+PRO_READ_CSV = 'evaluators/prnews/professional_reader.csv'
+
 
 if __name__=="__main__":
-    colormaps = ['orange', 'purple', 'blue', 'red', 'green', 'yellow', 'black', 'brown']
+    unused_methods = ['haskey', 'edit_sim_sent']
+    kws = ['analytics']
     prediction_files = [
-        #'evaluation/local_topics_acct_eval_predictions.csv',  # 61% MTurk precision
-        #'evaluation/global_topics_acct_eval_predictions.csv',  # 61% MTurk precision
-        #'evaluation/edit_acct_eval_predictions.csv',  # 65% MTurk precision
-        #'evaluation/acct_tte_sent_small_eval_predictions.csv', # 59% MTurk precision
-        'evaluation/prnews_accounting/acct_chatgpt_eval_predictions.csv'  # 59% MTurk precision
+        'evaluation/prnews_accounting/prnews_local_topic_emb_val_predictions.csv',
+        'evaluation/prnews_accounting/prnews_global_topic_emb_val_predictions.csv',
+        'evaluation/prnews_accounting/prnews_edit_val_predictions.csv',
+        # 'evaluation/prnews_accounting/tte_sent_small_eval_predictions.csv'
     ]
-    kws = [
-        'innovation',
-        'technology'
+    header_mappings = [
+        {'local_topics_sim:analyt': 'local_topics_sim:analytics',
+         'local_topics_sim:innov': 'local_topics_sim:innovation',
+         'local_topics_sim:technolog': 'local_topics_sim:technology'},
+        {'global_topics_sim:analyt': 'global_topics_sim:analytics',
+         'global_topics_sim:innov': 'global_topics_sim:innovation',
+         'global_topics_sim:technolog': 'global_topics_sim:technology'},
+        {'edit_sim:analytic': 'edit_sim:analytics', 'haskey:analytic': 'haskey:analytics'},
+        # {'Company':'company'}
     ]
 
-    thresholds = [0.5, 0.0, 0.1, 0.48, 0.5]
-    for prediction, th in zip(prediction_files, thresholds):
-        thresholded_precision(prediction, kws, th)
+    df_gt = load_gt(PRO_READ_CSV, index_key='company')
+    df_predictions = load_predictions_df(prediction_files, 'company', header_mappings)
+    methods = sorted(set([col.split(':')[0] for col in df_predictions.columns]))
+    eval_th = 0.5
+    results = defaultdict(list)
+    for kw in kws:
+        fig, ax = plt.subplots(1, 1)
+        # Get year based results.
+        df_gt['start_year:%s' % kw] = df_gt['start_year:%s' % kw].apply(
+            lambda x: pd.NA if x == '' else int(parse(x, fuzzy=True).year))
+        df_gt_year = df_gt[~df_gt['start_year:%s' % kw].isna()]
+        year_counts = df_gt_year['start_year:%s' % kw].value_counts()
+        year_counts = year_counts.sort_index()
+        year_counts.plot.bar()
+        for i, count in enumerate(year_counts):
+            ax.text(i, count, str(count), ha='center', va='bottom')
+        ax.set_xlabel('Year')
+        ax.set_ylabel('Count')
+        ax.set_title('Number of company using "%s" start year counts' % kw)
+        plt.show(block=True)
+        fig.savefig('evaluation/prnews_accounting/%s_year_count.jpg' % kw)
+        plt.close()
+        for year in df_gt_year['start_year:%s' % kw].unique():
+            gt_kw = df_gt_year['groundtruth:%s' % kw][df_gt_year['start_year:%s' % kw] == year]
+            common_idx = gt_kw.index.intersection(df_predictions.index)
+            df_predictions_local = df_predictions.loc[common_idx].reindex(gt_kw.index)
+            for method in methods:
+                if method in unused_methods:
+                    continue
+                score_col = ':'.join([method, kw])
+                pred = df_predictions_local[score_col]
+                #print(pred)
+                #print(gt_kw)
+                is_correct = ((pred > eval_th) == gt_kw.astype(int))
+                print('method={:s}, year={:d}, precision={:.4f}, thresholded_at={:.2f}'.format(
+                    method, year, np.mean(is_correct), eval_th))
+                results['concept'].append(kw)
+                results['method'].append(method)
+                results['year'].append(year)
+                results['precision'].append(np.mean(is_correct))
+                results['thresholded_at'].append(eval_th)
+    pd.DataFrame(results).to_csv(
+        'evaluation/prnews_accounting/year_conditioned_precisions.csv', index=False)

@@ -61,7 +61,9 @@ def main():
     print("generate evaluation results. ")
     model = train_utils.load(model_obj, latest_ckpt_path)
     df_val = pd.read_csv(
-        config['val_data_path'], dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
+        config['val_data_path'],
+        sep=pipelines.PRNEWS_DATA_SEP,
+        dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
     companies = df_val[config['ref_col']].unique().tolist()
     test_keywords = ['analytics', 'innovation', 'technology']
     kw_embeddings = {}
@@ -71,13 +73,19 @@ def main():
         data=[],
         columns=[config['model_name']+':'+kw for kw in test_keywords],
         index=companies)
-    for _, row in tqdm(df_val.iterrows(), total=len(df_val), desc='validation prediction'):
-        cond_prnews_emb = model.embedding(
-            [row[config['text_col']]], [row[config['ref_col']]])
+    predictions = predictions.fillna(0.0)
+    for c in tqdm(companies, desc='validation prediction %d companies' % len(companies)):
+        df_val_c = df_val[df_val[config['ref_col']] == c]
+        for _, row in df_val_c.iterrows():
+            prnews_emb = model.embedding([row[config['text_col']]], [row[config['ref_col']]])
         for kw in test_keywords:
-            kw_sim = metric_utils.pw_cos_sim(kw_embeddings[kw], cond_prnews_emb)
-            scores = (kw_sim.max(axis=1) + 1)/2
-            predictions[config['model_name']+':'+kw] = (scores + 1)/2
+            ic = companies.index(c)
+            kw_sim = metric_utils.pw_cos_sim(kw_embeddings[kw][ic:ic+1], prnews_emb)[0,0]
+            kw_sim = (kw_sim + 1)/2
+            if kw_sim > predictions.at[c, config['model_name'] + ':' + kw]:
+                predictions.at[c, config['model_name'] + ':' + kw] = kw_sim
+    predictions.index.name = 'company'
+    print(predictions)
     predictions.to_csv(os.path.join(
         pipelines.PRNEWS_EVAL_DIR, '%s_val_predictions.csv' % config['model_name']))
 

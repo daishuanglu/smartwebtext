@@ -8,7 +8,7 @@ text_col: "Text"
 ref_col: "Company"
 limit:
 
-skip_training: False
+skip_training: True
 clear_cache: True
 bert_model_name: 'distilbert-base-uncased'
 ref_emb_size: 256

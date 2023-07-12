@@ -72,7 +72,9 @@ def main():
     print("generate evaluation results. ")
     model = train_utils.load(model_obj, latest_ckpt_path)
     df_val = pd.read_csv(
-        config['val_data_path'], dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
+        config['val_data_path'],
+        sep=pipelines.PRNEWS_DATA_SEP,
+        dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
     companies = df_val[config['ref_col']].unique().tolist()
     test_keywords = ['analytics', 'innovation', 'technology']
     predictions = pd.DataFrame(
@@ -82,7 +84,7 @@ def main():
     for kw in test_keywords:
         user_embed, item_embed = model(
             {config['query_col']: [kw]* len(companies), config['ref_col']: companies})
-        scores = (user_embed * item_embed).sum(dim=1)
+        scores = (user_embed * item_embed).sum(dim=1).detach().cpu().numpy()
         predictions[config['model_name'] + ':' + kw] = (scores + 1)/2 # normalize cosine score to [0,1]
     predictions.to_csv(os.path.join(
         pipelines.PRNEWS_EVAL_DIR, '%s_val_predictions.csv' % config['model_name']))
