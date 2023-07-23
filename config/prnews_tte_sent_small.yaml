@@ -1,5 +1,5 @@
 model_name: 'prnews_tte_sent'
-skip_prep_data: False
+skip_prep_data: True
 neg_sample_ratio: 1.0
 train_data_path: "data_model/prnews_tte_collab_filter_training.csv"
 val_data_path: "data_model/prnews_tte_collab_filter_validation.csv"
@@ -10,7 +10,7 @@ clear_cache: True
 resume_ckpt: True
 
 # CF model parameters
-skip_training: False
+skip_training: True
 monitor: "val_loss"
 score_col: "scores"
 query_col: "Text"
@@ -22,3 +22,10 @@ learning_rate: 0.0001
 batch_size: 32
 epochs: 50
 limit:
+
+analytics_examples:
+  fpath: 'professional/analytics_examples.csv'
+  text_cols: [ 'related_paragraphs', 'title' ]
+  row_delimiter: ','
+  multi_sent_seps: [ '...', '\n' ]
+  preproc_sep: ';;;;'
