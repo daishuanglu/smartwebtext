@@ -14,13 +14,6 @@ from utils import data_utils
 from models import segmentation
 
 
-def pytorch_to_tensor(images):
-    tensor_images = [torch.from_numpy(image.transpose((2, 0, 1))).float() for image in images]
-    tensor_images = torch.stack(tensor_images)
-    tensor_images /= 255.0
-    return tensor_images
-
-
 def load_a2d_frame_images(dataset_dir, feature_dict, patch_size=(256,256)):
     fids = [int(fid) for fid in feature_dict['fids'].split(pipelines.A2D_FID_SEP)]
     vf = pipelines.A2D_CLIP_PATH.format(root=dataset_dir, vid=feature_dict['vid'])
