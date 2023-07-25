@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import os
+import re
 from typing import Dict, List
 import pandas as pd
 import glob
@@ -13,7 +14,7 @@ import time
 PRNEWS_FILEPATTERN = 'data_model/scrapped_news/webtext_thread_*.txt'
 PRNEWS_SEPARATOR = '\t'
 PRNEWS_HEADERS = ['Company', 'Stock', 'date', 'Title', 'Body']
-PRNEWS_INVALID_KEYTERMS = ['follow us', 'twitter|', 'linkedin|', '.copyright',
+PRNEWS_INVALID_KEYTERMS = ['follow us', 'twitter|', 'linkedin|', '.copyright', 'www.',
     'facebook:', 'visit:', 'twitter:', 'for more information', 'click here', 'email', 'phone', 'logo']
 PRNEWS_SENTENCE_MIN_WORDS = 5
 PRNEWS_PARAGRAPH_SEP = ';;;;'
@@ -34,15 +35,17 @@ FASTTEXT_HOME = 'fasttext'
 
 
 def prnews_text_preproc(s):
-    stopwords = string_utils.load_stopwords()
+    #stopwords = string_utils.load_stopwords()
     s = s.lower()
     s = [w.strip() for w in s.split(PRNEWS_PARAGRAPH_SEP)]
+    s = sum([string_utils.split_to_sentences(ss) for ss in s], [])
     for term in PRNEWS_INVALID_KEYTERMS:
         s = list(filter(lambda x: term not in x, s))
     s = [string_utils.remove_punct(sp) for sp in s]
     s = list(filter(lambda x: len(x.split()) > PRNEWS_SENTENCE_MIN_WORDS, s))
-    s = [string_utils.clean_char(sp) for sp in s]
-    s = [string_utils.remove_stopwords(sp, stopwords, sub=' ') for sp in s]
+    s = [string_utils.clean_char(sp).strip() for sp in s]
+    #s = [string_utils.remove_stopwords(sp, stopwords, sub=' ').strip() for sp in s]
+    s = [string_utils.replace_consecutive_spaces(sp) for sp in s]
     return PRNEWS_PARAGRAPH_SEP.join(s).strip()
 
 
@@ -69,8 +72,10 @@ def prnews(
         if t == '' and b == '':
             return ''
         else:
-            return PRNEWS_PARAGRAPH_SEP.join(
+            s = PRNEWS_PARAGRAPH_SEP.join(
                 [row['Title'].lower(), row['Body'].lower()]).strip()
+            company_name = string_utils.remove_company_suffix(row['Company'].lower()).strip()
+            return s.replace(company_name, '')
 
     textfile = dataloader.BaseTextFile(
         fpath=PRNEWS_FILEPATTERN, sep=PRNEWS_SEPARATOR,
@@ -80,7 +85,6 @@ def prnews(
         output_files=output_files,
         split_ratio=split_ratio,
         cols=['Company', 'Title', 'Text'],
-        explode_sep=PRNEWS_PARAGRAPH_SEP,
         sep=PRNEWS_DATA_SEP)
     for vocab_path, vocab_cols in vocabs.items():
         textfile.vocab(vocab_cols, vocab_path)

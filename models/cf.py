@@ -285,11 +285,10 @@ class TTEModel(ptl.LightningModule, ABC):
     def train_or_val_step(self, batch, training):
         user_embed, item_embed = self.forward(batch)
         predictions = (user_embed * item_embed).sum(dim=1)
-        loss = self.mse(predictions, batch[self.config["score_col"]])
+        targets = torch.tensor(batch[self.config["score_col"]]).to(device).float().detach()
+        loss = self.mse(predictions, targets)
         loss_type = 'train' if training else 'val'
-        log = {
-            f'{loss_type}_loss': loss.item()
-        }
+        log = {f'{loss_type}_loss': loss.item()}
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
         return loss
 

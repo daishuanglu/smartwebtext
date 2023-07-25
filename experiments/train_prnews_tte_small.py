@@ -1,35 +1,31 @@
 import os
+import json
 import pandas as pd
-
+import random
 from preprocessors import pipelines
 from utils import train_utils, data_utils
 from models import cf
 
 
+
 def main():
     config = train_utils.read_config("config/prnews_tte_sent_small.yaml")
-
-    train_sentence_features = {
-        config['ref_col']: (lambda x: str(x)),
-        config['query_col']: (lambda x: str(x)),
-        config['score_col']: (lambda x: 1.0 if float(x) > 0 else 0.0)}
-
     if not config.get("skip_prep_data", False):
         pipelines.prnews(
             output_files=[config['train_data_path'], config['val_data_path']],
             split_ratio=config['train_val_split_ratio'],
             vocabs={config['item_vocab_path']: [config['ref_col']]})
-        pipelines.prnews_negatives(
-            data_path=config['train_data_path'],
-            ref_col=config['ref_col'],
-            score_col=config['score_col'],
-            neg_ratio=config['neg_sample_ratio'])
-        pipelines.prnews_negatives(
-            data_path=config['val_data_path'],
-            ref_col=config['ref_col'],
-            score_col=config['score_col'],
-            neg_ratio=config['neg_sample_ratio'])
-
+    with open(config['item_vocab_path'], 'r') as f:
+        ref_vocab = json.load(f)
+    ref_vocab = list(ref_vocab.keys())
+    train_sentence_features = {
+        config['ref_col']: lambda x: str(x),
+        config['query_col']: (
+            lambda x: random.choice(str(x).split(pipelines.PRNEWS_PARAGRAPH_SEP)))}
+    train_sentence_cols = {
+        config['score_col']: (lambda x: int(random.random() > 0.5)),
+        config['ref_col']: (lambda x: x[config['ref_col']] if x[config['score_col']] == 1 else random.choice([
+                i for i in ref_vocab if i!=x[config['ref_col']]]))}
     logger_dir = config.get('logger_dir', train_utils.DEFAULT_LOGGER_DIR)
     model_obj = cf.TTEModel(config).to(train_utils.device)
     latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name']) \
@@ -45,6 +41,7 @@ def main():
             shuffle=True,
             sep=pipelines.PRNEWS_DATA_SEP,
             max_line=10 ** 7,
+            col_fns=train_sentence_cols,
             limit=config.get('limit', None))
         val_dl = data_utils.get_context_csv_data_loader(
             config['val_data_path'],
@@ -53,6 +50,7 @@ def main():
             clear_cache=config['clear_cache'],
             shuffle=False,
             sep=pipelines.PRNEWS_DATA_SEP,
+            col_fns=train_sentence_cols,
             max_line=10 ** 7,
             limit=config.get('limit', None)
         )

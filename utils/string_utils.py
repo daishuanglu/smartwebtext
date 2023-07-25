@@ -26,6 +26,19 @@ stemmer = SnowballStemmer("english")
 wnl = WordNetLemmatizer()
 rake=Rake()
 
+COMPANY_NAME_SUFFICES = [
+    'inc', 'llc', 'ltd', 'limited', 'corp', 'corporation', 'l.p.'
+    'llp', 'lp', 'incorporated', 'plc', 'lc', 'l.c', 'co', 'n.a.', 's.a.']
+
+def remove_company_suffix(s):
+    for suffix in COMPANY_NAME_SUFFICES:
+        if s.endswith(suffix):
+            s = s[:-len(suffix)]
+            return s.strip()
+        if s.endswith(suffix+'.'):
+            s = s[:-len(suffix)-1]
+            return s.strip()
+    return s
 
 def lemmed_fast(text, lem_fn, cores=6):  # tweak cores as needed
     with Pool(processes=cores) as pool:
@@ -86,6 +99,11 @@ def ignore_unicode_char(s):
 def clean_char(s):
     s = ignore_unicode_char(str(s))
     return s.replace('  ', ' ')
+
+
+def replace_consecutive_spaces(text):
+    # Use a regular expression to find consecutive spaces and replace them with a single space
+    return re.sub(r'\s+', ' ', text)
 
 def get_title_name(s, sep='-'):
     try:
