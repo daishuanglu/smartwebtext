@@ -23,6 +23,14 @@ from tqdm import tqdm
 git_vid_processor = AutoProcessor.from_pretrained("microsoft/git-base-vatex")
 git_vid_model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-vatex")
 np.random.seed(45)
+# load Mask2Former fine-tuned on COCO instance segmentation
+processor = AutoImageProcessor.from_pretrained(
+    "facebook/mask2former-swin-large-coco-instance")
+model = Mask2FormerForUniversalSegmentation.from_pretrained(
+    "facebook/mask2former-swin-large-coco-instance").to(train_utils.device)
+#git_processor = AutoProcessor.from_pretrained("microsoft/git-base")
+#git_model = AutoModelForCausalLM.from_pretrained("microsoft/git-base")
+#device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def read_video_pyav(container, indices):
@@ -57,14 +65,14 @@ def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
 
 def vid_caption(file_path):
     container = av.open(file_path)
-    num_frames = model.config.num_image_with_embedding
+    num_frames = git_vid_model.config.num_image_with_embedding
     indices = sample_frame_indices(
         clip_len=num_frames, frame_sample_rate=4, seg_len=container.streams.video[0].frames
     )
     frames = read_video_pyav(container, indices)
-    pixel_values = processor(images=list(frames), return_tensors="pt").pixel_values
-    generated_ids = model.generate(pixel_values=pixel_values, max_length=50)
-    generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
+    pixel_values = git_vid_processor(images=list(frames), return_tensors="pt").pixel_values
+    generated_ids = git_vid_model.generate(pixel_values=pixel_values, max_length=50)
+    generated_text = git_vid_processor.batch_decode(generated_ids, skip_special_tokens=True)
     print("Generated caption:", generated_text)
     return generated_text
 
@@ -95,15 +103,6 @@ def munkres_matching(cost_matrix, verbose=False):
             print(f'({row}, {column}) -> {value}')
         print(f'total cost: {total}')
     return indexes
-
-# load Mask2Former fine-tuned on COCO instance segmentation
-processor = AutoImageProcessor.from_pretrained(
-    "facebook/mask2former-swin-large-coco-instance").to(train_utils.device)
-model = Mask2FormerForUniversalSegmentation.from_pretrained(
-    "facebook/mask2former-swin-large-coco-instance").to(train_utils.device)
-#git_processor = AutoProcessor.from_pretrained("microsoft/git-base")
-#git_model = AutoModelForCausalLM.from_pretrained("microsoft/git-base")
-#device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def gzip_classifier(training_set, test_set, k):
@@ -278,14 +277,17 @@ def load_kth_vid_caps_split(split):
     caps = []
     for i, row in tqdm(list(df_split.iterrows()), total=len(df_split)):
         text = vid_caption(row['video'])
-        caps.append(text)
+        caps.append(text[0])
         classes.append(row['action'])
-    training_set = list(zip(classes, caps))
+        print('action class=', row['action'])
+    training_set = list(zip(caps, classes))
     return training_set
 
 
 if __name__ == '__main__':
     training_set = load_kth_vid_caps_split('train')
+    validation_set = load_kth_vid_caps_split('val')
+    training_set = training_set + validation_set
     test_set = load_kth_vid_caps_split('eval')
     test_predictions = gzip_classifier(training_set, test_set, k=5)
     n_correct = 0
