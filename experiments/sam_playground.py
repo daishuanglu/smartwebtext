@@ -285,6 +285,8 @@ def load_kth_vid_caps_split(split):
 
 
 if __name__ == '__main__':
+    KTH_DATASET_DIR = 'C:/Users/shud0/KTHactions'
+    pipelines.kth_action_video_nobbox(KTH_DATASET_DIR)
     training_set = load_kth_vid_caps_split('train')
     validation_set = load_kth_vid_caps_split('val')
     training_set = training_set + validation_set
