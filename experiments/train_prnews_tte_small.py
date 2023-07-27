@@ -5,7 +5,7 @@ import random
 from preprocessors import pipelines
 from utils import train_utils, data_utils
 from models import cf
-
+from tqdm import tqdm
 
 
 def main():
@@ -70,20 +70,26 @@ def main():
     print("generate evaluation results. ")
     model = train_utils.load(model_obj, latest_ckpt_path)
     df_val = pd.read_csv(
-        config['val_data_path'],
+        config['train_data_path'],
         sep=pipelines.PRNEWS_DATA_SEP,
         dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
-    companies = df_val[config['ref_col']].unique().tolist()
-    test_keywords = ['analytics', 'innovation', 'technology']
+    df_val = df_val[config['ref_col']]
+    companies = df_val.unique().tolist()
+    test_concepts = ['analytics', 'innovation', 'technology']
     predictions = pd.DataFrame(
         data=[],
-        columns=[config['model_name'] + ':' + kw for kw in test_keywords],
+        columns=[config['model_name'] + ':' + kw for kw in test_concepts],
         index=companies)
-    for kw in test_keywords:
-        user_embed, item_embed = model(
-            {config['query_col']: [kw]* len(companies), config['ref_col']: companies})
-        scores = (user_embed * item_embed).sum(dim=1).detach().cpu().numpy()
-        predictions[config['model_name'] + ':' + kw] = (scores + 1)/2 # normalize cosine score to [0,1]
+    for concept in test_concepts:
+        queries = pipelines.prnews_concept_examples(**config['%s_examples' % concept])
+        scores = []
+        for comp in tqdm(companies, desc=concept):
+            user_embed, item_embed = model(
+                {config['query_col']: queries, config['ref_col']: [comp]*len(queries)})
+            score = (user_embed * item_embed).sum(dim=1).detach().cpu().numpy().max()
+            scores.append((score+1)/2)
+        predictions[config['model_name'] + ':' + concept] = scores # normalize cosine score to [0,1]
+    predictions.index.name = 'company'
     predictions.to_csv(os.path.join(
         pipelines.PRNEWS_EVAL_DIR, '%s_val_predictions.csv' % config['model_name']))
 
