@@ -1,7 +1,12 @@
+import av
 import numpy as np
 import gzip
 import PIL.Image as PilImage
-from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
+from transformers import AutoProcessor, \
+    AutoImageProcessor, \
+    Mask2FormerForUniversalSegmentation, \
+    AutoModelForCausalLM
+
 import torch
 import cv2
 from utils import color_utils
@@ -11,6 +16,57 @@ from munkres import Munkres, print_matrix, DISALLOWED
 from scipy.ndimage import measurements
 from sklearn.metrics import euclidean_distances
 from utils import train_utils
+import pandas as pd
+from tqdm import tqdm
+
+
+git_vid_processor = AutoProcessor.from_pretrained("microsoft/git-base-vatex")
+git_vid_model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-vatex")
+np.random.seed(45)
+
+
+def read_video_pyav(container, indices):
+    '''
+    Decode the video with PyAV decoder.
+    Args:
+        container (`av.container.input.InputContainer`): PyAV container.
+        indices (`List[int]`): List of frame indices to decode.
+    Returns:
+        result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+    '''
+    frames = []
+    container.seek(0)
+    start_index = indices[0]
+    end_index = indices[-1]
+    for i, frame in enumerate(container.decode(video=0)):
+        if i > end_index:
+            break
+        if i >= start_index and i in indices:
+            frames.append(frame)
+    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+
+def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+    converted_len = int(clip_len * frame_sample_rate)
+    end_idx = np.random.randint(converted_len, seg_len)
+    start_idx = end_idx - converted_len
+    indices = np.linspace(start_idx, end_idx, num=clip_len)
+    indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+    return indices
+
+
+def vid_caption(file_path):
+    container = av.open(file_path)
+    num_frames = model.config.num_image_with_embedding
+    indices = sample_frame_indices(
+        clip_len=num_frames, frame_sample_rate=4, seg_len=container.streams.video[0].frames
+    )
+    frames = read_video_pyav(container, indices)
+    pixel_values = processor(images=list(frames), return_tensors="pt").pixel_values
+    generated_ids = model.generate(pixel_values=pixel_values, max_length=50)
+    generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
+    print("Generated caption:", generated_text)
+    return generated_text
 
 
 def find_center_of_binary_image(binary_image):
@@ -45,6 +101,9 @@ processor = AutoImageProcessor.from_pretrained(
     "facebook/mask2former-swin-large-coco-instance").to(train_utils.device)
 model = Mask2FormerForUniversalSegmentation.from_pretrained(
     "facebook/mask2former-swin-large-coco-instance").to(train_utils.device)
+#git_processor = AutoProcessor.from_pretrained("microsoft/git-base")
+#git_model = AutoModelForCausalLM.from_pretrained("microsoft/git-base")
+#device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def gzip_classifier(training_set, test_set, k):
@@ -164,7 +223,7 @@ def l2_dist(center_set2, center_set1):
     return d
 
 
-if __name__ == '__main__':
+def test_tracking():
     A2D_DIR = 'D:/video_datasets/A2D'
     vid = '__KkKB4wzrY'
     vid = '_0djE279Srg'
@@ -175,27 +234,27 @@ if __name__ == '__main__':
     v = pims.Video(vf)
     prev_result_info = {}
     for i, frame in enumerate(v):
-        #if i < 12:
+        # if i < 12:
         #    continue
-        print('-' * 10, 'frame %d' % i, '-'* 10)
+        print('-' * 10, 'frame %d' % i, '-' * 10)
         result = instance_segmentation(frame)
         result_info = instance_string(**result)
         if prev_result_info:
             print([color_utils.MSCOCO_OBJ_NAMES[info['id']] for info in result_info])
             cost_matrix_x = gzip_dist([info['repr_x'] for info in result_info],
-                                    [info['repr_x'] for info in prev_result_info])
-            #cost_matrix_y = gzip_dist([info['repr_y'] for info in result_info],
+                                      [info['repr_x'] for info in prev_result_info])
+            # cost_matrix_y = gzip_dist([info['repr_y'] for info in result_info],
             #                          [info['repr_y'] for info in prev_result_info])
             label_cost_matrix = np.array([[
                 (info['label_id'] != prev_info['label_id']) * 100 for info in result_info]
                 for prev_info in prev_result_info])
-            #cost_matrix_c = l2_dist([info['center'] for info in result_info],
+            # cost_matrix_c = l2_dist([info['center'] for info in result_info],
             #                        [info['center'] for info in prev_result_info])
             area_cost_matrix = np.array([[
                 abs(info['area'] - prev_info['area']) for info in result_info]
                 for prev_info in prev_result_info])
-            #cost_matrix[label_cost_matrix] = DISALLOWED
-            #matching_cost = cost_matrix.tolist()
+            # cost_matrix[label_cost_matrix] = DISALLOWED
+            # matching_cost = cost_matrix.tolist()
             matching_cost = cost_matrix_x + label_cost_matrix + area_cost_matrix
             id_maps = munkres_matching(matching_cost, verbose=True)
             for prev_i, cur_i in id_maps:
@@ -205,7 +264,31 @@ if __name__ == '__main__':
         track_obj_color_viz = draw_segmentation_id(result['segmentation'], result_info)
         cv2.imshow('test tracking %s' % (vid), track_obj_color_viz)
         prev_result_info = result_info.copy()
-        #print('tracked objects=', [
+        # print('tracked objects=', [
         #    color_utils.MSCOCO_OBJ_NAMES[info['label_id']] for info in prev_result_info])
         cv2.waitKey(10)
-        #cv2.destroyAllWindows()
+        # cv2.destroyAllWindows()
+    return
+
+def load_kth_vid_caps_split(split):
+    df_split = pd.read_csv(
+        pipelines.KTH_SPLIT_CSV.format(split=split),
+        dtype=str, keep_default_na=False, na_values=[], parse_dates=False)
+    classes = []
+    caps = []
+    for i, row in tqdm(list(df_split.iterrows()), total=len(df_split)):
+        text = vid_caption(row['video'])
+        caps.append(text)
+        classes.append(row['action'])
+    training_set = list(zip(classes, caps))
+    return training_set
+
+
+if __name__ == '__main__':
+    training_set = load_kth_vid_caps_split('train')
+    test_set = load_kth_vid_caps_split('eval')
+    test_predictions = gzip_classifier(training_set, test_set, k=5)
+    n_correct = 0
+    for gt, pred in zip(test_set, test_predictions):
+        n_correct += (gt[1] == pred)
+    print('KTH accuracy =', n_correct/ len(test_set))

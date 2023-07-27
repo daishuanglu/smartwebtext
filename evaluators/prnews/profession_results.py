@@ -47,7 +47,7 @@ if __name__=="__main__":
         'evaluation/prnews_accounting/prnews_local_topic_emb_val_predictions.csv',
         'evaluation/prnews_accounting/prnews_global_topic_emb_val_predictions.csv',
         'evaluation/prnews_accounting/prnews_edit_val_predictions.csv',
-        # 'evaluation/prnews_accounting/tte_sent_small_eval_predictions.csv'
+        'evaluation/prnews_accounting/prnews_tte_sent_val_predictions.csv'
     ]
     header_mappings = [
         {'local_topics_sim:analyt': 'local_topics_sim:analytics',
