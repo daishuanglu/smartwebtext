@@ -57,7 +57,7 @@ if __name__=="__main__":
          'global_topics_sim:innov': 'global_topics_sim:innovation',
          'global_topics_sim:technolog': 'global_topics_sim:technology'},
         {'edit_sim:analytic': 'edit_sim:analytics', 'haskey:analytic': 'haskey:analytics'},
-        # {'Company':'company'}
+        {}
     ]
 
     df_gt = load_gt(PRO_READ_CSV, index_key='company')
@@ -66,11 +66,14 @@ if __name__=="__main__":
     eval_th = 0.5
     results = defaultdict(list)
     for kw in kws:
+        df_gt['groundtruth:%s' % kw] = pd.to_numeric(df_gt['groundtruth:%s' % kw], errors='coerce')
+        df_gt_kw = df_gt[~df_gt['groundtruth:%s' % kw].isna()]
+        print('load %d %s gt samples.' % (len(df_gt_kw), kw))
         fig, ax = plt.subplots(1, 1)
         # Get year based results.
-        df_gt['start_year:%s' % kw] = df_gt['start_year:%s' % kw].apply(
+        df_gt_kw['start_year:%s' % kw] = df_gt_kw['start_year:%s' % kw].apply(
             lambda x: pd.NA if x == '' else int(parse(x, fuzzy=True).year))
-        df_gt_year = df_gt[~df_gt['start_year:%s' % kw].isna()]
+        df_gt_year = df_gt_kw[~df_gt_kw['start_year:%s' % kw].isna()]
         year_counts = df_gt_year['start_year:%s' % kw].value_counts()
         year_counts = year_counts.sort_index()
         year_counts.plot.bar()

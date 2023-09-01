@@ -34,4 +34,6 @@ opencv-python
 pycocotools
 matplotlib
 hungarian-loss
+pytube
+moviepy
 # How to use tensorboard: tensorboard --logdir=$EVENTS_FOLDER

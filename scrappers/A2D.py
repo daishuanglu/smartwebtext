@@ -47,8 +47,8 @@ if __name__=='__main__':
         '--dataset_dir', required=True,
         help='Output directory for Actor and Action Video (A2D) dataset')
     args = parser.parse_args()
-    download_utils.metadata(url=METADATA_URL, dataset_dir=args.dataset_dir)
-    download_utils.metadata(url=EXT_METADATA_URL, dataset_dir=args.dataset_dir)
+    download_utils.metadata_txt(url=METADATA_URL, dataset_dir=args.dataset_dir)
+    download_utils.metadata_txt(url=EXT_METADATA_URL, dataset_dir=args.dataset_dir)
     download_utils.zip(url=VID_DATA_URL, dataset_dir=args.dataset_dir, type='bz')
     download_utils.zip(
         url=EXT_ANNOTATION_URL,

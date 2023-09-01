@@ -62,9 +62,9 @@ if __name__=='__main__':
         '--dataset_dir', required=True,
         help='Output directory for Joint HMDB dataset')
     args = parser.parse_args()
-    download_utils.metadata(url=METADATA_URL, dataset_dir=args.dataset_dir)
-    download_utils.metadata(url=EXT_METADATA_URL, dataset_dir=args.dataset_dir)
-    download_utils.metadata(url=SPLITS_METADATA_URL, dataset_dir=args.dataset_dir)
+    download_utils.metadata_txt(url=METADATA_URL, dataset_dir=args.dataset_dir)
+    download_utils.metadata_txt(url=EXT_METADATA_URL, dataset_dir=args.dataset_dir)
+    download_utils.metadata_txt(url=SPLITS_METADATA_URL, dataset_dir=args.dataset_dir)
     download_utils.zip(url=SPLITS_URL, dataset_dir=args.dataset_dir, type='rar')
     download_utils.zip(url=STABLE_VID_URL, dataset_dir=args.dataset_dir, type='rar')
     video_data_dir = os.path.join(args.dataset_dir, STABLE_VID_URL.split('/')[-1].split('.')[0])

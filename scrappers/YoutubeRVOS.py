@@ -122,7 +122,7 @@ if __name__=='__main__':
         '--dataset_dir', required=True,
         help='Output directory for Youtube RVOS dataset.')
     args = parser.parse_args()
-    download_utils.metadata(
+    download_utils.metadata_txt(
         url=TRAIN2021_INFO_URL, dataset_dir=args.dataset_dir, output_fname='train2021_info.txt')
     download_utils.zip(
         url=TEXT_EXPR_URL, dataset_dir=args.dataset_dir, type='zip', output_fname='train2021_text_expr')

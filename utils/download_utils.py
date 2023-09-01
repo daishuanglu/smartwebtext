@@ -8,10 +8,21 @@ import zipfile
 import tarfile
 import rarfile
 import gdown
+from pytube import YouTube
 
 
 GDRIVE_URL = 'https://drive.google.com/uc?id={ID}'
 
+
+def download_clip_from_youtube(video_url, local_path):
+    yt = YouTube(video_url)
+    try:
+        filtered_stream = yt.streams.filter(file_extension='mp4').first()
+        filtered_stream.download(filename=local_path, timeout=3000, max_retries=3)
+    except Exception as e:
+        return {'status': e.__repr__()}
+    
+    return {'status': 'success'}
 
 def download_file_from_google_drive(id, destination):
     URL = "https://docs.google.com/uc?export=download"
@@ -79,7 +90,7 @@ def dl(url, output_fname):
     return filename
 
 
-def metadata(url, dataset_dir, output_fname=None):
+def metadata_txt(url, dataset_dir, output_fname=None):
     os.makedirs(dataset_dir, exist_ok=True)
     filename = dl(url, output_fname)
     if output_fname is None:
@@ -117,11 +128,11 @@ def zip(url, dataset_dir, type='zip', output_fname=None):
         sav_dir = os.path.join(dataset_dir, filename.split('.')[0])
     else:
         sav_dir = os.path.join(dataset_dir, output_fname.split('.')[0])
-    os.makedirs(sav_dir, exist_ok=True)
-    print('Unzipping to ', sav_dir)
-    unzip_file(filename, sav_dir, type)
+    #os.makedirs(sav_dir, exist_ok=True)
+    print('Unzipping to ', dataset_dir)
+    unzip_file(filename, dataset_dir, type)
     print('Remove cached zipfile', filename)
     os.remove(filename)
-    return
+    return sav_dir
 
 

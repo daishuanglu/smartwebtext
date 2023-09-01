@@ -24,9 +24,9 @@ git_vid_processor = AutoProcessor.from_pretrained("microsoft/git-base-vatex")
 git_vid_model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-vatex")
 np.random.seed(45)
 # load Mask2Former fine-tuned on COCO instance segmentation
-processor = AutoImageProcessor.from_pretrained(
+m2f_ins_processor = AutoImageProcessor.from_pretrained(
     "facebook/mask2former-swin-large-coco-instance")
-model = Mask2FormerForUniversalSegmentation.from_pretrained(
+m2f_ins_model = Mask2FormerForUniversalSegmentation.from_pretrained(
     "facebook/mask2former-swin-large-coco-instance").to(train_utils.device)
 #git_processor = AutoProcessor.from_pretrained("microsoft/git-base")
 #git_model = AutoModelForCausalLM.from_pretrained("microsoft/git-base")
@@ -137,10 +137,10 @@ def test_segmentation():
     test_image_path = '%s/BSDS500/data/images/train/8049.jpg' % HOME
     test_segmented_image_path = '%s/exmperimental/8049.jpg' % HOME
     image = PilImage.open(test_image_path)
-    inputs = processor(images=image, return_tensors="pt")
+    inputs = m2f_ins_processor(images=image, return_tensors="pt")
     with torch.no_grad():
-        outputs = model(**inputs)
-    result = processor.post_process_instance_segmentation(outputs, target_sizes=[image.size[::-1]])[0]
+        outputs = m2f_ins_model(**inputs)
+    result = m2f_ins_processor.post_process_instance_segmentation(outputs, target_sizes=[image.size[::-1]])[0]
     segmented_color_map = draw_segmentation_id(**result)
     cv2.imwrite(test_segmented_image_path, segmented_color_map)
     return result
@@ -148,10 +148,10 @@ def test_segmentation():
 
 def instance_segmentation(np_img):
     pil_img = PilImage.fromarray(np_img)
-    inputs = processor(images=pil_img, return_tensors="pt")
+    inputs = m2f_ins_processor(images=pil_img, return_tensors="pt")
     with torch.no_grad():
-        outputs = model(**inputs)
-    result = processor.post_process_instance_segmentation(outputs, target_sizes=[pil_img.size[::-1]])[0]
+        outputs = m2f_ins_model(**inputs)
+    result = m2f_ins_processor.post_process_instance_segmentation(outputs, target_sizes=[pil_img.size[::-1]])[0]
     return result
 
 
@@ -222,6 +222,18 @@ def l2_dist(center_set2, center_set1):
     return d
 
 
+def ncd_human_mask_traj(vid_path, nframes=10):
+    v = pims.Video(vid_path)
+    #clip_len = len(v)
+    #indices = sample_frame_indices(clip_len, frame_sample_rate=1, seg_len=nframes)
+    for i, frame in enumerate(v):
+        print('-' * 10, 'frame %d' % i, '-' * 10)
+        result = instance_segmentation(frame)
+        result['segments_info'] = [info for info in result['segments_info'] if info['label_id'] == 0]
+        result_info = instance_string(**result)
+
+    return
+
 def test_tracking():
     A2D_DIR = 'D:/video_datasets/A2D'
     vid = '__KkKB4wzrY'
@@ -284,7 +296,7 @@ def load_kth_vid_caps_split(split):
     return training_set
 
 
-if __name__ == '__main__':
+def _run_vid_gzip():
     KTH_DATASET_DIR = 'C:/Users/shud0/KTHactions'
     pipelines.kth_action_video_nobbox(KTH_DATASET_DIR)
     training_set = load_kth_vid_caps_split('train')
@@ -295,4 +307,8 @@ if __name__ == '__main__':
     n_correct = 0
     for gt, pred in zip(test_set, test_predictions):
         n_correct += (gt[1] == pred)
-    print('KTH accuracy =', n_correct/ len(test_set))
+    print('KTH accuracy =', n_correct / len(test_set))
+    return
+
+
+if __name__ == '__main__':
