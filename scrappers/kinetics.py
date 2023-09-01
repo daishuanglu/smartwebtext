@@ -70,11 +70,6 @@ if __name__=='__main__':
         '--size', default='224,224',
         help='resize video to size height,width.')
     args = parser.parse_args()
-    #class args:
-    #    dataset_dir = 'D:/video_datasets'
-    #    set = '400'
-    #    size = '224,224'
-
     vsize = args.size.split(',')
     vsize = int(vsize[0]), int(vsize[1])
     if args.set not in ['400', '600', '700']:
@@ -90,8 +85,5 @@ if __name__=='__main__':
             data = json.load(f)
         os.makedirs(data_dir, exist_ok=True)
         df = p_map(partial(dl_video, data_dir=data_dir, vsize=vsize), list(data.items()))
-        #df = []
-        #for sample in tqdm(data.items()):
-        #    df.append(dl_video(sample, video_path, vsize))
         df = [d for d in df if d]
         pd.DataFrame(df).to_csv(metadata_path, index=False)
