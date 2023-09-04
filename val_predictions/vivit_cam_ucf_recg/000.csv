@@ -1,3 +1,0 @@
-target,predictions,vid_path,className,is_correct
-0,69,ApplyEyeMakeup/v_ApplyEyeMakeup_g08_c02.avi,ApplyEyeMakeup,False
-0,69,ApplyEyeMakeup/v_ApplyEyeMakeup_g08_c03.avi,ApplyEyeMakeup,False
