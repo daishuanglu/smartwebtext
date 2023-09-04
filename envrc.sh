@@ -21,4 +21,5 @@ pip3 install spacy
 python3 -m spacy download en_core_web_sm
 pip install git+https://github.com/facebookresearch/segment-anything.git
 pip3 install -U -r requirements.txt
+pip3 install
 export PYTHONPATH=$PYTHONPATH:.

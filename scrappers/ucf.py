@@ -30,6 +30,7 @@ Sports
 """
 
 import argparse
+import os
 import ssl
 
 from utils import download_utils
@@ -51,10 +52,8 @@ if __name__=='__main__':
         '--dataset_dir', required=True,
         help='Output directory for UCF101 dataset')
     args = parser.parse_args()
-    #class args:
-    #    dataset_dir = 'D:/video_datasets'
-    sav_dir = download_utils.zip(url=DATASET_URL, dataset_dir=args.dataset_dir, type='rar')
-    print('UCF 101 dataset saved at ', sav_dir)
+    sav_dir = os.path.join(args.dataset_dir, 'UCF-101')
+    #print('UCF 101 dataset saved at ', sav_dir)
     download_utils.zip(url=RECOGNITION_METADATA_URL, dataset_dir=sav_dir, type='zip')
     download_utils.zip(url=DETECTION_METADATA_URL, dataset_dir=sav_dir, type='zip')
     download_utils.zip(url=VIDEO_ANNOTATION_URL, dataset_dir=sav_dir, type='zip')

@@ -1,7 +1,7 @@
 from collections import defaultdict
 import numpy as np
 import pandas as pd
-from fastDamerauLevenshtein import damerauLevenshtein
+from utils.string_utils import damerauLevenshtein
 from dateutil.parser import parse
 import matplotlib.pyplot as plt
 from evaluators.prnews.renderTurk import load_gt, load_predictions_df

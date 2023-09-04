@@ -1,5 +1,5 @@
 from itertools import cycle
-from fastDamerauLevenshtein import damerauLevenshtein
+#from fastDamerauLevenshtein import damerauLevenshtein  # deprecated for py3.11
 import numpy as np
 from numpy.linalg import norm
 from numpy import dot
@@ -323,6 +323,36 @@ def findLocalWords(str1, keywords_rule,center='analytics', nlocal=12):
         if containkwOR(' '.join(words.split()[-(nlocal + 1):]), keywords_rule):
             return True
     return False
+
+
+def damerauLevenshtein(s1, s2, similarity):
+    # Create a matrix to store the distances
+    len_s1 = len(s1)
+    len_s2 = len(s2)
+    d = [[0] * (len_s2 + 1) for _ in range(len_s1 + 1)]
+    # Initialize the matrix
+    for i in range(len_s1 + 1):
+        d[i][0] = i
+    for j in range(len_s2 + 1):
+        d[0][j] = j
+    for i in range(1, len_s1 + 1):
+        for j in range(1, len_s2 + 1):
+            cost = 0 if s1[i - 1] == s2[j - 1] else 1
+            d[i][j] = min(
+                d[i - 1][j] + 1,  # Deletion
+                d[i][j - 1] + 1,  # Insertion
+                d[i - 1][j - 1] + cost,  # Substitution
+            )
+            if i > 1 and j > 1 and s1[i - 1] == s2[j - 2] and s1[i - 2] == s2[j - 1]:
+                d[i][j] = min(d[i][j], d[i - 2][j - 2] + cost)  # Transposition
+    if similarity:
+        max_len = max(len_s1, len_s2)
+        if max_len == 0:
+            return 1.0  # Both strings are empty, so they are identical
+        similarity_ratio = 1.0 - (d[len_s1][len_s2] / max_len)
+        return similarity_ratio
+    else:
+        return d[len_s1][len_s2]
 
 
 def edit(s1,s2):

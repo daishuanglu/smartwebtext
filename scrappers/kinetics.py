@@ -51,7 +51,8 @@ def dl_video(vid_sample, data_dir, vsize):
             writer.write(resized_frame)
         writer.release()
         shutil.move(tmp_vfname, video_path.format(vid=vid))
-        return {'vid': vid,
+        return {'clip_path': '/'.join([sample['subset'], vid]),
+                'vid': vid,
                 'label': sample['annotations']['label'],
                 'split': sample['subset']}
     else:

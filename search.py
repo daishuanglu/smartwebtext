@@ -2,7 +2,6 @@ import pandas as pd
 from embedding import LocalTopicAsEmbedding, GlobalTopicAsEmbedding
 from utils.string_utils import *
 from utils.ticker_utils import ticker_finder
-from fastDamerauLevenshtein import damerauLevenshtein
 import time
 from collections import defaultdict
 

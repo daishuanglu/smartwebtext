@@ -4,7 +4,7 @@ from sklearn.metrics import average_precision_score,precision_recall_curve
 import matplotlib.pyplot as plt
 from sklearn.metrics import precision_score, recall_score
 from typing import Dict, Any
-from fastDamerauLevenshtein import damerauLevenshtein
+from utils.string_utils import damerauLevenshtein
 import pandas as pd
 from tabulate import tabulate
 

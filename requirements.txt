@@ -7,7 +7,7 @@ dill
 pandas
 spacy
 matplotlib
-fastDamerauLevenshtein
+#fastDamerauLevenshtein  # deprecated for py311
 nltk
 rake-nltk
 gensim
@@ -22,6 +22,7 @@ sentence-transformers
 tensorboard
 pybackground
 rarfile
+decord
 #sudo apt-get install unrar
 gdown
 pims

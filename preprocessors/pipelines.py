@@ -1,7 +1,5 @@
-import math
 import numpy as np
 import os
-import re
 from typing import Dict, List
 import pandas as pd
 import glob
@@ -143,6 +141,7 @@ A2D_IMAGE_SPLIT_CSV = 'data_model/A2D_video_image_{split}.csv'
 A2D_FID_SEP = ';;;'
 A2D_INFO_PATH = '{root}/A2D_main_1_0/Release/README'
 
+
 def a2d_annotated_frame_ids(root, vid):
     fids = []
     for anno_path in glob.glob(A2D_ANNOTATION_PATH.format(root=root, vid=vid, fid='*')):
@@ -217,19 +216,47 @@ def kth_action_video_nobbox(kth_action_home):
     return
 
 
-def kth_action_video():
-    textfile = dataloader.PandasTextFile(fpath=KTH_ACTION_SRC_CSV, sep=KTH_ACTION_DATA_CSV_SEP)
-    df = textfile.all()
-    for split in df[KTH_SPLIT_COL].unique():
-        df_split = df[df[KTH_SPLIT_COL] == split]
-        df_output = pd.DataFrame([], index=df_split['vid'].unique())
-        for uuid in df_split['vid'].unique():
-            df_split_uuid = df_split[df_split['vid'] == uuid]
-            df_split_uuid = df_split_uuid.sort_values(
-                ['fid', 'x', 'y'], ascending=[True, True, True])
-            for col in df_split.columns:
-                df_output.at[uuid, col] = df_split_uuid[col].str.cat(sep=KTH_FRAME_FEATURE_SEP)
-        df_output.to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
-        print('KTH action ', split, 'set: ', len(df), 'samples')
+UCF_VIDEO = 'video'
+UCF_CLASS_IDX = 'classId'
+UCF_CLIP_PATH = 'clip_path'
+UCF_RECG_SPLIT_PATH = \
+    '{dataset_dir}/ucfTrainTestlist/{split}list{no:02d}.txt'
+UCF_RECG_CLS_INDEX_PATH = \
+    '{dataset_dir}/ucfTrainTestlist/classInd.txt'
+UCF_RECG_SPLIT_FILE_NO = {'train': 3, 'test': 3}
+UCF_RECG_SPLIT_HEADERS = ['vid_path', UCF_CLASS_IDX]
+UCF_RECG_TRAIN_SPLIT_CSV = 'data_model/ucf_recg_{split}.csv'
+UCF_NUM_CLASSES = 101
+
+
+def ucf_recognition(dataset_dir, train_val_split_ratio=[0.95, 0.05]):
+    class_index_fpath = UCF_RECG_CLS_INDEX_PATH.format(dataset_dir=dataset_dir)
+    cls_ind = pd.read_csv(
+        class_index_fpath, header=None, delimiter=' ', names=[UCF_CLASS_IDX, 'name'])
+    cls_ind.set_index(UCF_CLASS_IDX, inplace=True)
+
+    for split, num_split_files in UCF_RECG_SPLIT_FILE_NO.items():
+        dfs = {'train': [], 'val': [], 'test':[]}
+        for i in range(num_split_files):
+            split_fpath = UCF_RECG_SPLIT_PATH.format(
+                dataset_dir=dataset_dir, split=split, no=i+1)
+            print(split_fpath)
+            df_split = pd.read_csv(
+                split_fpath, header=None, delimiter=' ', names=UCF_RECG_SPLIT_HEADERS)
+            df_split[UCF_CLIP_PATH] = df_split['vid_path'].apply(lambda x: os.path.join(dataset_dir, x))
+            if split == 'train':
+                df_split['className'] = df_split[UCF_CLASS_IDX].apply(lambda x: cls_ind.loc[x]['name'])
+                df_split['split'] = df_split.apply(lambda x: np.random.choice(
+                    ['train', 'val'], p=train_val_split_ratio), axis=1)
+                dfs['train'].append(df_split[df_split['split'] == 'train'])
+                dfs['val'].append(df_split[df_split['split'] == 'val'])
+            else:
+                dfs[split].append(df_split)
+        for split, df_list in dfs.items():
+            if df_list:
+                df = pd.concat(df_list).reset_index()
+                duplicated_rows = df[df.duplicated(subset=['vid_path'], keep='first')]
+                df = df.drop(duplicated_rows.index)
+                df.to_csv(UCF_RECG_TRAIN_SPLIT_CSV.format(split=split), index=False)
     return
 
