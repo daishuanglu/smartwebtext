@@ -31,7 +31,8 @@ def main():
     device_ctx = cpu(0) if train_utils.device == 'cpu' else gpu(0)
     train_ucf_recg_cols = {
         pipelines.UCF_VIDEO: lambda x: load_ucf_frames(
-            x, config['clip_len'], config['frame_sample_rate'], device_ctx)
+            x, config['clip_len'], config['frame_sample_rate'], device_ctx),
+        'id': lambda x: os.path.basename(x['vid_path']).split('.')[0]
     }
     logger_dir = config.get("logger_dir", train_utils.DEFAULT_LOGGER_DIR)
     os.makedirs(logger_dir, exist_ok=True)

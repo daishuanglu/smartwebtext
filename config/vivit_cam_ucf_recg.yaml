@@ -3,6 +3,7 @@ train_val_ratio: [0.95, 0.05]
 skip_prep_data: True
 dataset_dir: 'D:/video_datasets/UCF-101'
 val_prediction_fstr: 'val_predictions/vivit_cam_ucf_recg/{epoch:03d}.csv'
+val_prediction_fvid: 'val_predictions/vivit_cam_ucf_recg/{epoch:03d}/{vid}.mp4'
 #Model
 skip_training: False
 clip_len: 32

@@ -3,6 +3,7 @@ import json
 from collections import namedtuple
 from typing import List
 
+
 ColorCode = namedtuple('ColorCode', ['id', 'name', 'color'])
 MSCOCO_NUM_INSTANCE = 80
 # Classes
@@ -88,6 +89,7 @@ MSCOCO_OBJ_NAMES ={
   78: 'hair drier',
   79: 'toothbrush'
 }
+
 
 def save_color_codes(color_codes: List[ColorCode], fpath: str):
     for cc in color_codes:

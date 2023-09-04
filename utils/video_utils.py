@@ -1,5 +1,38 @@
 import av
 import numpy as np
+import cv2
+
+def save3d(output_path, list_of_imgs, fps=10):
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    width, height, _ = list_of_imgs[0].shape
+    video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    for frame in list_of_imgs:
+        video_writer.write(frame)
+    video_writer.release()
+
+
+def video_heatmap_colors(heats):
+    outputs = []
+    for heat in heats:
+        # Normalize the data to the range [0, 255]
+        normalized_data = cv2.normalize(heat, None, 0, 255, cv2.NORM_MINMAX)
+        # Apply the color map (heatmap)
+        heatmap = cv2.applyColorMap(np.uint8(normalized_data), cv2.COLORMAP_JET)
+        outputs.append(heatmap)
+    return np.stack(outputs)
+
+
+def video_alpha_blending(heats, ori_imgs, frame_size):
+    blended = []
+    for ih, ori_img in enumerate(ori_imgs):
+        img = cv2.resize(ori_img, frame_size)
+        heat = heats[:, :, ih]
+        normalized_data = cv2.normalize(heat, None, 0, 255, cv2.NORM_MINMAX)
+        hm = cv2.applyColorMap(np.uint8(normalized_data), cv2.COLORMAP_JET)
+        combined_image = cv2.addWeighted(img, 0.5, hm, 0.5, 0)
+        combined_image = cv2.cvtColor(combined_image, cv2.COLOR_BGR2RGB)
+        blended.append(combined_image)
+    return np.stack(blended)
 
 
 def read_video_pyav(file_path, indices):
