@@ -22,24 +22,18 @@ def mean_pooling(token_embeddings, attention_mask):
 def heats_cube(heats, cubelet_size, cube_size):
     heats = heats[:, 1:]
     bsize, n_cubelets = heats.size()
-    heats_in_cube = torch.zeros((bsize,) + cube_size).to(heats.device)
-    nrows = cube_size[0]//cubelet_size[0]
-    ncols = cube_size[1]//cubelet_size[1]
-    nlen = cube_size[2]//cubelet_size[2]
-    for b in range(bsize):
-        for i in range(nrows):
-            for j in range(ncols):
-                for k in range(nlen):
-                    heat = heats[b, j+i*ncols+k*nrows*ncols]
-                    #print('row=', i, 'col=',j, 'frame=',k, 'heat=', heat)
-                    heats_in_cube[i*cubelet_size[0]: (i+1)*cubelet_size[0],
-                        j*cubelet_size[1]:(j+1)*cubelet_size[1],
-                        k*cubelet_size[2]: (k+1)*cubelet_size[2]] = heat
-    #heats = heats.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-    #expanded_heats = torch.zeros((bsize, n_cubelets) + cubelet_size).to(heats.device)
-    #expanded_heats += heats
-    #heats_in_cube = expanded_heats.view((bsize,)+ cube_size)
-    return heats_in_cube
+    # 16 * 14 * 14 -> 16 * 224 * 224
+    nrows = cube_size[0]//cubelet_size
+    ncols = cube_size[1]//cubelet_size
+    nlen = cube_size[2]//cubelet_size
+    heats = heats.view(bsize, nrows, ncols, nlen)
+    #heats = heats.transpose(3, 1)
+    heats = heats.unsqueeze(1)
+    # bsize* 1 * 14 * 14 * 16 -> bsize * 1 * 224*224*256
+    heats = F.upsample(heats, scale_factor=cubelet_size, mode='nearest')
+    heats = heats.squeeze(1)
+    #heats = heats.transpose(1, 3)
+    return heats
 
 
 class Vivit(ptl.LightningModule, ABC):
@@ -98,9 +92,9 @@ class Vivit(ptl.LightningModule, ABC):
         self.df_predictions.append(df_pred)
         log = {'batch_error_rate': 1 - df_pred['is_correct'].mean()}
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
-        if self.global_step % self.config.get('val_cam_steps', 10) == 0:
-            batch_cams = outputs['cam'][:, :, predictions].squeeze(-1)
-            heatmaps = heats_cube(batch_cams, cube_size=(224, 224, 256), cubelet_size=(16, 16, 16))
+        if self.global_step % self.config.get('val_cam_steps', 1000) == 0:
+            batch_cams = outputs['cam'][torch.arange(outputs['cam'].size(0)), :, predictions]
+            heatmaps = heats_cube(batch_cams, cube_size=(224, 224, 256), cubelet_size=16)
             for hm, clip, vid in zip(heatmaps, batch[self.video_key], batch['id']):
                 blended_heatmap = video_utils.video_alpha_blending(
                     hm.detach().cpu().numpy(), clip, frame_size=(224, 224))
