@@ -52,9 +52,6 @@ class Vivit(ptl.LightningModule, ABC):
         self.epoch = 0
         self.val_cam = None
         os.makedirs(os.path.dirname(self.config['val_prediction_fstr']), exist_ok=True)
-        val_vid_fdir = os.path.dirname(self.config['val_prediction_fvid'])
-        for i in range(self.config['epochs']):
-            os.makedirs(val_vid_fdir.format(epoch=i), exist_ok=True)
 
     def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
         inputs = self.image_processor(batch[self.video_key], return_tensors="pt")
@@ -93,13 +90,15 @@ class Vivit(ptl.LightningModule, ABC):
         log = {'batch_error_rate': 1 - df_pred['is_correct'].mean()}
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
         if self.global_step % self.config.get('val_cam_steps', 1000) == 0:
+            val_video_fpath = self.config['val_prediction_fvid'].format(iter=self.global_step,
+                                                                        vid='{:s}')
+            os.makedirs(os.path.dirname(val_video_fpath), exist_ok=True)
             batch_cams = outputs['cam'][torch.arange(outputs['cam'].size(0)), :, predictions]
             heatmaps = heats_cube(batch_cams, cube_size=(224, 224, 256), cubelet_size=16)
             for hm, clip, vid in zip(heatmaps, batch[self.video_key], batch['id']):
                 blended_heatmap = video_utils.video_alpha_blending(
                     hm.detach().cpu().numpy(), clip, frame_size=(224, 224))
-                output_path = self.config['val_prediction_fvid'].format(vid=vid, epoch=self.epoch)
-                video_utils.save3d(output_path, blended_heatmap)
+                video_utils.save3d(val_video_fpath.format(vid), blended_heatmap)
         return log['batch_error_rate']
 
     def on_validation_epoch_end(self):
