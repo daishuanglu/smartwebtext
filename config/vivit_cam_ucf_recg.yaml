@@ -1,6 +1,6 @@
 model_name: 'vivit_cam_ucf_recg'
 train_val_ratio: [0.95, 0.05]
-skip_prep_data: True
+skip_prep_data: False
 dataset_dir: '/home/shud/video_datasets/UCF-101'
 val_prediction_fstr: 'val_predictions/vivit_cam_ucf_recg/{epoch:03d}.csv'
 val_prediction_fvid: 'val_predictions/vivit_cam_ucf_recg/iter_{iter:03d}/{vid}.mp4'

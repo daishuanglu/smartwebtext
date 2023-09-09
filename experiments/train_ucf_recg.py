@@ -1,21 +1,16 @@
-
 import os
-from decord import VideoReader, cpu
-
+import numpy as np
+import pims
 from preprocessors import pipelines
 from utils import train_utils, data_utils, video_utils
 from models import video_recognition
 
 
-def load_ucf_frames(feature_dict, clip_len, frame_sample_rate, device_ctx):
-    #print('load video frames')
-    with open(feature_dict['clip_path'], 'rb') as f:
-        vr = VideoReader(f, ctx=device_ctx)
-    #print('sample video frames')
+def load_ucf_frames(feature_dict, clip_len, frame_sample_rate):
+    vf = pims.Video(feature_dict['clip_path'])
     indices = video_utils.sample_frame_indices(
-        clip_len=clip_len, frame_sample_rate=frame_sample_rate, seg_len=len(vr))
-    #print('get a batch of video frames')
-    frames = list(vr.get_batch(indices).asnumpy())
+        clip_len=clip_len, frame_sample_rate=frame_sample_rate, seg_len=len(vf))
+    frames = [np.array(vf[i]) for i in indices]
     return frames
 
 
@@ -31,7 +26,7 @@ def main():
     }
     train_ucf_recg_cols = {
         pipelines.UCF_VIDEO: lambda x: load_ucf_frames(
-            x, config['clip_len'], config['frame_sample_rate'], cpu(0)),
+            x, config['clip_len'], config['frame_sample_rate']),
         'id': lambda x: os.path.basename(x['vid_path']).split('.')[0]
     }
     logger_dir = config.get("logger_dir", train_utils.DEFAULT_LOGGER_DIR)

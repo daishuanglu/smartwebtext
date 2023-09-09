@@ -22,7 +22,7 @@ sentence-transformers
 tensorboard
 pybackground
 rarfile
-decord
+#decord # decord lib is a trash. Do not use it for any reason.
 #sudo apt-get install unrar
 gdown
 pims

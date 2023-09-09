@@ -227,6 +227,7 @@ UCF_RECG_SPLIT_FILE_NO = {'train': 3, 'test': 3}
 UCF_RECG_SPLIT_HEADERS = ['vid_path', UCF_CLASS_IDX]
 UCF_RECG_TRAIN_SPLIT_CSV = 'data_model/ucf_recg_{split}.csv'
 UCF_NUM_CLASSES = 101
+INVALID_UCF_RECG_VIDS = ['PushUps/v_PushUps_g16_c04.avi']
 
 
 def ucf_recognition(dataset_dir, train_val_split_ratio=[0.95, 0.05]):
@@ -243,6 +244,7 @@ def ucf_recognition(dataset_dir, train_val_split_ratio=[0.95, 0.05]):
             print(split_fpath)
             df_split = pd.read_csv(
                 split_fpath, header=None, delimiter=' ', names=UCF_RECG_SPLIT_HEADERS)
+            df_split = df_split[~df_split['vid_path'].isin(INVALID_UCF_RECG_VIDS)]
             df_split[UCF_CLIP_PATH] = df_split['vid_path'].apply(lambda x: os.path.join(dataset_dir, x))
             if split == 'train':
                 df_split['className'] = df_split[UCF_CLASS_IDX].apply(lambda x: cls_ind.loc[x]['name'])
