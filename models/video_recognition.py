@@ -89,7 +89,7 @@ class Vivit(ptl.LightningModule, ABC):
         self.df_predictions.append(df_pred)
         log = {'batch_error_rate': 1 - df_pred['is_correct'].mean()}
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
-        if self.global_step % self.config.get('val_cam_steps', 1000) == 0:
+        if self.global_step % self.config.get('val_clip_steps', 1000) == 0:
             val_video_fpath = self.config['val_prediction_fvid'].format(iter=self.global_step,
                                                                         vid='{:s}')
             os.makedirs(os.path.dirname(val_video_fpath), exist_ok=True)
