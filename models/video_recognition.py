@@ -1,5 +1,4 @@
 import os
-import numpy as np
 import pandas as pd
 import torch
 import pytorch_lightning as ptl
@@ -9,7 +8,7 @@ from transformers import VivitImageProcessor, VivitModel
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import video_utils
+from utils import video_utils, train_utils
 
 #Mean Pooling - Take attention mask into account for correct averaging
 def mean_pooling(token_embeddings, attention_mask):
@@ -43,7 +42,8 @@ class Vivit(ptl.LightningModule, ABC):
         self.target_key = target_key
         self.num_classes = num_classes
         self.config = config
-        self.image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
+        self.image_processor = VivitImageProcessor.from_pretrained(
+            "google/vivit-b-16x2-kinetics400")
         self.model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
         self.dense_pool_emb = nn.Linear(768, num_classes)
         self.nll = nn.NLLLoss()
@@ -55,6 +55,7 @@ class Vivit(ptl.LightningModule, ABC):
 
     def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
         inputs = self.image_processor(batch[self.video_key], return_tensors="pt")
+        inputs = inputs.to(train_utils.device)
         outputs = self.model(**inputs)
         # batch_size * 3137 (16*16*16 + 1) * embed_size (768)
         encoded_seq = outputs.last_hidden_state

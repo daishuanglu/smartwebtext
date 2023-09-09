@@ -1,7 +1,7 @@
 model_name: 'vivit_cam_ucf_recg'
 train_val_ratio: [0.95, 0.05]
 skip_prep_data: True
-dataset_dir: 'D:/video_datasets/UCF-101'
+dataset_dir: '/home/shud/video_datasets/UCF-101'
 val_prediction_fstr: 'val_predictions/vivit_cam_ucf_recg/{epoch:03d}.csv'
 val_prediction_fvid: 'val_predictions/vivit_cam_ucf_recg/iter_{iter:03d}/{vid}.mp4'
 val_clip_steps: 3000
@@ -14,7 +14,7 @@ map_loss_factor: 0.0
 learning_rate: 0.0001
 monitor: 'val_error_rate'
 epochs: 100
-batch_size: 2
+batch_size: 1
 clear_cache: False
 limit:
 logger_dir: 'lightning_logs'

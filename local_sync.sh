@@ -5,7 +5,7 @@ IP="192.168.0.26"
 a="code"
 b="prnews"
 c="fasttext"
-d='predictions'
+d='val_pred'
 e="setup"
 f="model"
 g="log"
@@ -64,7 +64,6 @@ then
 fi
 if [ $1 == $d ]
 then
-    echo "download predictions to shud@192.168.0.XX..."
-    mkdir -p evaluation
-    scp -r shuangludai@$IP:/home/shud/$fdir/evaluation/* evaluation
+    echo "download validation predictions from shud@192.168.0.XX..."
+    scp -r shud@$IP:/home/shud/$fdir/val_predictions ./
 fi

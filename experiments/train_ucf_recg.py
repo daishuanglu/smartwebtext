@@ -1,7 +1,6 @@
 
 import os
-from decord import VideoReader
-from decord import cpu, gpu
+from decord import VideoReader, cpu
 
 from preprocessors import pipelines
 from utils import train_utils, data_utils, video_utils
@@ -9,10 +8,13 @@ from models import video_recognition
 
 
 def load_ucf_frames(feature_dict, clip_len, frame_sample_rate, device_ctx):
+    #print('load video frames')
     with open(feature_dict['clip_path'], 'rb') as f:
         vr = VideoReader(f, ctx=device_ctx)
+    #print('sample video frames')
     indices = video_utils.sample_frame_indices(
         clip_len=clip_len, frame_sample_rate=frame_sample_rate, seg_len=len(vr))
+    #print('get a batch of video frames')
     frames = list(vr.get_batch(indices).asnumpy())
     return frames
 
@@ -21,17 +23,15 @@ def main():
     config = train_utils.read_config("config/vivit_cam_ucf_recg.yaml")
     if not config.get("skip_prep_data", False):
         pipelines.ucf_recognition(config['dataset_dir'], config['train_val_ratio'])
-
     train_ucf_recg_features = {
         'vid_path': (lambda x: str(x)),
         pipelines.UCF_CLIP_PATH: (lambda x: str(x)),
         pipelines.UCF_CLASS_IDX: (lambda x: int(x) - 1),
         'className': (lambda x: str(x))
     }
-    device_ctx = cpu(0) if train_utils.device == 'cpu' else gpu(0)
     train_ucf_recg_cols = {
         pipelines.UCF_VIDEO: lambda x: load_ucf_frames(
-            x, config['clip_len'], config['frame_sample_rate'], device_ctx),
+            x, config['clip_len'], config['frame_sample_rate'], cpu(0)),
         'id': lambda x: os.path.basename(x['vid_path']).split('.')[0]
     }
     logger_dir = config.get("logger_dir", train_utils.DEFAULT_LOGGER_DIR)
@@ -40,8 +40,10 @@ def main():
         config,
         video_key=pipelines.UCF_VIDEO,
         target_key=pipelines.UCF_CLASS_IDX,
-        num_classes=pipelines.UCF_NUM_CLASSES).to(train_utils.device)
+        num_classes=pipelines.UCF_NUM_CLASSES)
     print("model initialized. ")
+    model_obj = model_obj.to(train_utils.device)
+    print("model moved to device: ", train_utils.device)
     latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name']) \
         if config['resume_ckpt'] else None
     if not config.get('skip_training', False):

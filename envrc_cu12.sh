@@ -1,8 +1,8 @@
 #!/bin/bash
 set -eux
-pip install virtualenv
-virtualenv venv
-source venv/bin/activate
+#pip install virtualenv
+#virtualenv venv
+#source venv/bin/activate
 pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
 pip3 install nltk
 python3 -m nltk.downloader stopwords
