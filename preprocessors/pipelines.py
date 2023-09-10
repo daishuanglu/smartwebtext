@@ -227,7 +227,8 @@ UCF_RECG_SPLIT_FILE_NO = {'train': 3, 'test': 3}
 UCF_RECG_SPLIT_HEADERS = ['vid_path', UCF_CLASS_IDX]
 UCF_RECG_TRAIN_SPLIT_CSV = 'data_model/ucf_recg_{split}.csv'
 UCF_NUM_CLASSES = 101
-INVALID_UCF_RECG_VIDS = ['PushUps/v_PushUps_g16_c04.avi']
+INVALID_UCF_RECG_VIDS = ['PushUps/v_PushUps_g16_c04.avi',
+                         'BlowingCandles/v_BlowingCandles_g05_c03.avi']
 
 
 def ucf_recognition(dataset_dir, train_val_split_ratio=[0.95, 0.05]):
