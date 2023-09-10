@@ -2,6 +2,7 @@ import av
 import numpy as np
 import cv2
 
+
 def save3d(output_path, list_of_imgs, fps=10):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     width, height, _ = list_of_imgs[0].shape

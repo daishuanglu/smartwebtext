@@ -111,7 +111,6 @@ class Vivit(ptl.LightningModule, ABC):
         df_pred.to_csv(output_path, index=False)
         self.df_predictions = []
         self.epoch +=1
-
         return log['val_error_rate']
 
     def configure_optimizers(self):

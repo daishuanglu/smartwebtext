@@ -2,8 +2,14 @@ import math
 import json
 from collections import namedtuple
 from typing import List
+import matplotlib.colors as mcolors
+from matplotlib.lines import Line2D
 
 
+PLOT_MARKERS = lambda x: list(Line2D.markers)[x % len(Line2D.markers)]
+PLOT_CSS4_COLORS = lambda x: list(mcolors.CSS4_COLORS)[x % len(mcolors.CSS4_COLORS)]
+PLOT_TAB_COLORS = lambda x:  list(mcolors.TABLEAU_COLORS)[x % len(mcolors.TABLEAU_COLORS)]
+PLOT_BASE_COLORS = lambda x: list(mcolors.BASE_COLORS)[x % len(mcolors.BASE_COLORS)]
 ColorCode = namedtuple('ColorCode', ['id', 'name', 'color'])
 MSCOCO_NUM_INSTANCE = 80
 # Classes

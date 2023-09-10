@@ -36,4 +36,5 @@ pycocotools
 matplotlib
 hungarian-loss
 pytube
+tabulate
 # How to use tensorboard: tensorboard --logdir=$EVENTS_FOLDER

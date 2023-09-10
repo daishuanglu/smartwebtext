@@ -2,8 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import time
-from fastDamerauLevenshtein import damerauLevenshtein
-from utils import ticker_utils
+from utils import ticker_utils, string_utils
 from preprocessors import pipelines
 
 COMBINED_TEXT_COL = 'Text'
@@ -25,7 +24,7 @@ def get_kw_edit_sim_dataset(src_df, keywords, comp=None):
         context = str(context).lower()
         ic=comp_list.index(company)
         haskw[ic,:]=np.logical_or(haskw[ic,:], [kw in context for kw in keywords])
-        s = [max([damerauLevenshtein(
+        s = [max([string_utils.damerauLevenshtein(
             w,kw,similarity=True) for w in context.split()]) for kw in keywords]
         for j in range(len(keywords)):
             if s[j]>scores[j,ic]:
