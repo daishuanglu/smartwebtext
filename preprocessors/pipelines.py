@@ -217,6 +217,7 @@ def kth_action_video_nobbox(kth_action_home):
 
 
 UCF_VIDEO = 'video'
+UCF_VIDEO_ZOOMIN = 'video_zoomin'
 UCF_CLASS_IDX = 'classId'
 UCF_CLIP_PATH = 'clip_path'
 UCF_RECG_SPLIT_PATH = \

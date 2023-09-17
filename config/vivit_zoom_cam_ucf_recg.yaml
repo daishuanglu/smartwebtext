@@ -1,8 +1,9 @@
-model_name: 'vivit_cam_ucf_recg'
+model_name: 'vivit_zoomin_cam_ucf_recg'
 train_val_ratio: [0.95, 0.05]
 skip_prep_data: True
 dataset_dir: '/home/shud/video_datasets/UCF-101'
-val_prediction_fstr: 'val_predictions/vivit_cam_ucf_recg/{epoch:03d}.csv'
+#dataset_dir: 'D:/video_datasets/UCF-101'
+val_prediction_fstr: 'val_predictions/vivit_zoomin_cam_ucf_recg/{epoch:03d}.csv'
 val_clip_steps: 3000
 #Model
 skip_training: False
@@ -16,6 +17,6 @@ epochs: 100
 batch_size: 1
 clear_cache: False
 limit:
+zoom_in_scale: 4
 logger_dir: 'lightning_logs'
 resume_ckpt: True
-

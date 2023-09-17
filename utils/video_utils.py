@@ -1,6 +1,8 @@
 import av
 import numpy as np
 import cv2
+from typing import List
+import random
 
 
 def save3d(output_path, list_of_imgs, fps=10):
@@ -23,10 +25,10 @@ def video_heatmap_colors(heats):
     return np.stack(outputs)
 
 
-def video_alpha_blending(heats, ori_imgs, frame_size):
+def video_alpha_blending(heats, ori_imgs, frame_size=None):
     blended = []
     for ih, ori_img in enumerate(ori_imgs):
-        img = cv2.resize(ori_img, frame_size)
+        img = ori_img if frame_size is None else cv2.resize(ori_img, frame_size)
         heat = heats[:, :, ih]
         normalized_data = cv2.normalize(heat, None, 0, 255, cv2.NORM_MINMAX)
         hm = cv2.applyColorMap(np.uint8(normalized_data), cv2.COLORMAP_JET)
@@ -65,3 +67,24 @@ def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
     indices = np.linspace(start_idx, end_idx, num=clip_len)
     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
     return indices
+
+
+def random_crop_frames_np(frames: List[np.array], crop_size):
+    w, h, _ = frames[0].shape
+    x = random.randint(0, w-crop_size[0])
+    y = random.randint(0, h-crop_size[1])
+    return [f[x:x+crop_size[0], y:y+crop_size[1], :] for f in frames]
+
+
+def frame_to_crops_np(frames: List[np.array], crop_size):
+    w, h, _ = frames[0].shape
+    for x in range(0, w, crop_size[0]):
+        for y in range(0, h, crop_size[1]):
+            xs, xe = x, x+crop_size[0]
+            ys, ye = y, y+crop_size[1]
+            if ye > h:
+                ys, ye = h - crop_size[1], h
+            if xe > w:
+                xs, xe = w - crop_size[0], w
+            cropped_frames = [f[x:, y:y+crop_size[1], :] for f in frames]
+            yield ((xs, ys), cropped_frames)

@@ -6,16 +6,22 @@ from utils import train_utils, data_utils, video_utils
 from models import video_recognition
 
 
-def load_ucf_frames(feature_dict, clip_len, frame_sample_rate):
+def load_ucf_frames(feature_dict, clip_len, frame_sample_rate, zoom_in_scale=None):
     vf = pims.Video(feature_dict['clip_path'])
     indices = video_utils.sample_frame_indices(
         clip_len=clip_len, frame_sample_rate=frame_sample_rate, seg_len=len(vf))
     frames = [np.array(vf[i]) for i in indices]
-    return frames
+    frames_zoomin = None
+    if zoom_in_scale is not None:
+        zoom_size = (frames[0].shape[0] // zoom_in_scale,
+                     frames[0].shape[1] // zoom_in_scale)
+        frames_zoomin = video_utils.random_crop_frames_np(frames, zoom_size)
+    return {pipelines.UCF_VIDEO: frames, pipelines.UCF_VIDEO_ZOOMIN: frames_zoomin}
 
 
 def main():
     config = train_utils.read_config("config/vivit_cam_ucf_recg.yaml")
+    #config = train_utils.read_config("config/vivit_zoom_cam_ucf_recg.yaml")
     if not config.get("skip_prep_data", False):
         pipelines.ucf_recognition(config['dataset_dir'], config['train_val_ratio'])
     train_ucf_recg_features = {
@@ -25,8 +31,10 @@ def main():
         'className': (lambda x: str(x))
     }
     train_ucf_recg_cols = {
-        pipelines.UCF_VIDEO: lambda x: load_ucf_frames(
-            x, config['clip_len'], config['frame_sample_rate']),
+        'inputs': lambda x: load_ucf_frames(x,
+                                            config['clip_len'],
+                                            config['frame_sample_rate'],
+                                            config.get('zoom_in_scale', None)),
         'id': lambda x: os.path.basename(x['vid_path']).split('.')[0]
     }
     logger_dir = config.get("logger_dir", train_utils.DEFAULT_LOGGER_DIR)
@@ -34,6 +42,7 @@ def main():
     model_obj = video_recognition.Vivit(
         config,
         video_key=pipelines.UCF_VIDEO,
+        zoomin_video_key=pipelines.UCF_VIDEO_ZOOMIN,
         target_key=pipelines.UCF_CLASS_IDX,
         num_classes=pipelines.UCF_NUM_CLASSES)
     print("model initialized. ")
@@ -49,6 +58,7 @@ def main():
             col_fns=train_ucf_recg_cols,
             batch_size=config['batch_size'],
             clear_cache=config['clear_cache'],
+            flat_cols=True,
             shuffle=True,
             sep=',',
             max_line=10 ** 7,
@@ -60,6 +70,7 @@ def main():
             col_fns=train_ucf_recg_cols,
             batch_size=config['batch_size'],
             clear_cache=config['clear_cache'],
+            flat_cols=True,
             shuffle=False,
             sep=',',
             max_line=10 ** 7,

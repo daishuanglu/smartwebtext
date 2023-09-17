@@ -9,6 +9,7 @@ tmp/
 data/
 data_model/
 evaluation/
+val_predictions/
 lightning_logs/
 fasttext/
 **/__pycache__
