@@ -1,4 +1,6 @@
 import os
+import random
+
 import pandas as pd
 import torch
 import pytorch_lightning as ptl
@@ -22,9 +24,9 @@ def heats_cube(heats, cubelet_size, cube_size, target_size=None):
     heats = heats[:, 1:]
     bsize, n_cubelets = heats.size()
     # 16 * 14 * 14 -> 16 * 224 * 224
-    nrows = cube_size[0]//cubelet_size
-    ncols = cube_size[1]//cubelet_size
-    nlen = cube_size[2]//cubelet_size
+    nrows = cube_size[0]//cubelet_size[0]
+    ncols = cube_size[1]//cubelet_size[1]
+    nlen = cube_size[2]//cubelet_size[2]
     heats = heats.view(bsize, nrows, ncols, nlen)
     #heats = heats.transpose(3, 1)
     heats = heats.unsqueeze(1)
@@ -50,8 +52,9 @@ class Vivit(ptl.LightningModule, ABC):
             "google/vivit-b-16x2-kinetics400")
         self.model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
         self.dense_pool_emb = nn.Linear(768, num_classes)
-        if self.config.get('zoom_in_scale', 0) > 0:
-            self.zoom_in_model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
+        if (self.config.get('zoom_in_scale', 1) > 1 and
+                self.config.get('rand_crop_rate', 0.0) == 0.0):
+            #self.zoom_in_model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
             self.dense_pool_zoomin_emb = nn.Linear(768, num_classes)
         self.ce = nn.CrossEntropyLoss()
         self.df_predictions = []
@@ -60,6 +63,24 @@ class Vivit(ptl.LightningModule, ABC):
         self.val_steps = 0
         self.val_pred_dir = os.path.dirname(self.config['val_prediction_fstr'])
         os.makedirs(self.val_pred_dir, exist_ok=True)
+
+    def rand_crop_logits(self, batch_videos, pooled_seq):
+        output_logits = []
+        for frames in batch_videos:
+            frame_size = frames[0].shape
+            crop_size = (frame_size[0] // self.config['zoom_in_scale'],
+                         frame_size[1] // self.config['zoom_in_scale'])
+            cropped_frames = list(
+                self.cropped_frames(frames, crop_size, sample_a_crop=True))[0][1]
+            inputs_zoomin = self.image_processor([cropped_frames], return_tensors="pt")
+            inputs_zoomin = inputs_zoomin.to(train_utils.device)
+            outputs_zoomin = self.model(**inputs_zoomin)
+            encoded_seq_zoomin = outputs_zoomin.last_hidden_state * pooled_seq.unsqueeze(1)
+            p_encoded_seq_zoomin = torch.sigmoid(encoded_seq_zoomin)
+            pooled_zoomin_seq = torch.mean(p_encoded_seq_zoomin, dim=1)
+            logits_zoomin = self.dense_pool_zoomin_emb(pooled_zoomin_seq)
+            output_logits.append(logits_zoomin)
+        return torch.cat(output_logits, 0)
 
     def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
         inputs = self.image_processor(batch[self.video_key], return_tensors="pt")
@@ -72,28 +93,17 @@ class Vivit(ptl.LightningModule, ABC):
         pooled_seq = torch.mean(p_encoded_seq, dim=1)
         logits = self.dense_pool_emb(pooled_seq)
         p = F.softmax(logits, dim=-1)
-        cam = self.dense_pool_emb(encoded_seq)
-        # Zoom in sequence
-        p_zoomin = None
-        cam_zoomin = None
-        if self.config.get('zoom_in_scale', 0) > 0:
-            inputs_zoomin = self.image_processor(batch[self.zoomin_video_key], return_tensors="pt")
-            inputs_zoomin = inputs_zoomin.to(train_utils.device)
-            zoomin_outputs = self.zoom_in_model(**inputs_zoomin)
-            encoded_seq_zoomin = zoomin_outputs.last_hidden_state \
-                                 + torch.mean(encoded_seq, dim=1, keepdim=True)
-            p_encoded_seq_zoomin = torch.sigmoid(encoded_seq_zoomin)
-            pooled_zoomin_seq = torch.mean(p_encoded_seq_zoomin, dim=1)
-            logits_zoomin = self.dense_pool_zoomin_emb(pooled_zoomin_seq)
-            p_zoomin = F.softmax(logits_zoomin, dim=-1)
-            cam_zoomin = self.dense_pool_zoomin_emb(encoded_seq_zoomin)
         loss = None
+        p_zoomin = None
         if compute_loss:
             targets = torch.tensor(batch[self.target_key]).to(p.device)
             loss = self.ce(logits, targets.long())
-            if self.config.get('zoom_in_scale', 0) > 0:
+            if (self.config.get('zoom_in_scale', 1) > 1 and
+                    self.config.get('rand_crop_rate', 0.0) == 0.0):
+                logits_zoomin = self.rand_crop_logits(batch[self.video_key], pooled_seq)
+                p_zoomin = F.softmax(logits_zoomin, dim=-1)
                 loss += self.ce(logits_zoomin, targets.long())
-        return {'p': p, 'cam': cam, 'loss': loss, 'p_zoomin': p_zoomin, 'cam_zoomin': cam_zoomin}
+        return {'p': p, 'loss': loss, 'p_zoomin': p_zoomin}
 
     def training_step(self, batch, batch_nb):
         outputs = self.forward(batch, compute_loss=True)
@@ -102,44 +112,51 @@ class Vivit(ptl.LightningModule, ABC):
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
         return {'loss': outputs['loss']}
 
-    def cam_zoomin(self, batch_videos):
+    def cropped_frames(self, frames, crop_size, sample_a_crop=False):
+        frame_size = frames[0].shape
+        positions = video_utils.frame_crop_positions(frame_size[0], frame_size[1], crop_size)
+        if sample_a_crop:
+            positions = [random.choice(positions)]
+        for x,y in positions:
+            crop_frames = [f[x:x + crop_size[0], y:y + crop_size[1], :] for f in frames]
+            yield (x, y), crop_frames
+
+    def cam(self, batch_videos, predictions):
+        inputs = self.image_processor(batch_videos, return_tensors="pt")
+        inputs = inputs.to(train_utils.device)
+        outputs = self.model(**inputs)
+        # batch_size * 3137 (16*16*16 + 1) * embed_size (768)
+        encoded_seq = outputs.last_hidden_state
+        cam = self.dense_pool_emb(encoded_seq)
+        batch_cams = cam[torch.arange(cam.size(0)), :, predictions]
+        clip_size = batch_videos[0][0].shape[:2] + (len(batch_videos[0]),)
+        heatmaps = heats_cube(batch_cams,
+                              cube_size=(224, 224, 32), # Vivit 3D input clip size
+                              cubelet_size=(16, 16, 2),
+                              target_size=clip_size) # Vivit base tubelet size
+        return heatmaps
+
+    def cam_zoomin(self, batch_videos, predictions):
         heatmaps = []
         for frames in batch_videos:
             frame_size = frames[0].shape
-            zoom_size = (frame_size[0] // self.config['zoom_in_scale'],
+            crop_size = (frame_size[0] // self.config['zoom_in_scale'],
                          frame_size[1] // self.config['zoom_in_scale'])
-            positions = []
-            batch = {self.video_key: [], self.zoomin_video_key: []}
-            for (x, y), cropped_frames in video_utils.frame_to_crops_np(frames, zoom_size):
-                batch[self.video_key].append(frames)
-                batch[self.zoomin_video_key].append(cropped_frames)
-                positions.append((x, y))
-            cropped_heatmap = []
-            for clip, clip_zoomin in zip(
-                    batch[self.video_key], batch[self.zoomin_video_key]):
-                outputs = self({self.video_key: [clip],
-                                self.zoomin_video_key: [clip_zoomin]}, compute_loss=False)
-                predictions_zoomin = outputs['p_zoomin'].argmax(dim=-1)
-                batch_cams = outputs['cam_zoomin'][
-                    torch.arange(outputs['cam_zoomin'].size(0)), :, predictions_zoomin]
-                cropped_heatmap.append(heats_cube(batch_cams,
-                                             cube_size=(224, 224, 256),
-                                             cubelet_size=16,
-                                             target_size=zoom_size+(256,))[0])
-            # CUDA out of memory if not using loop
-            #outputs = self(batch, compute_loss=False)
-            #predictions_zoomin = outputs['p_zoomin'].argmax(dim=-1)
-            #batch_cams = outputs['cam_zoomin'][
-            #    torch.arange(outputs['cam_zoomin'].size(0)), :, predictions_zoomin]
-            #cropped_heatmap = heats_cube(batch_cams,
-            #                             cube_size=(224, 224, 256),
-            #                             cubelet_size=16,
-            #                             target_size=zoom_size+(256,))
             heatmap = torch.zeros(frame_size[:2] + (256,)).to(train_utils.device)
             counts = torch.zeros_like(heatmap)
-            for hm, (x, y) in zip(cropped_heatmap, positions):
-                heatmap[x:x+zoom_size[0], y:y+zoom_size[1], :] += hm.detach()
-                counts[x:x+zoom_size[0], y:y+zoom_size[1], :] += 1
+            for (x, y), crop_frames in self.cropped_frames(frames, crop_size, sample_a_crop=False):
+                inputs = self.image_processor([crop_frames], return_tensors="pt")
+                inputs = inputs.to(train_utils.device)
+                outputs = self.model(**inputs)
+                cam = self.dense_pool_zoomin_emb(outputs.last_hidden_state)
+                batch_cams = cam[torch.arange(cam.size(0)), :, predictions]
+                clip_size = crop_frames[0].shape[:2] + (len(crop_frames),)
+                hm = heats_cube(batch_cams,
+                                cube_size=(224, 224, 32),  # Vivit 3D input clip size
+                                cubelet_size=(16, 16, 2),
+                                target_size=clip_size)[0]  # Vivit base tubelet size
+                heatmap[x:x+crop_size[0], y:y+crop_size[1], :] += hm.detach()
+                counts[x:x+crop_size[0], y:y+crop_size[1], :] += 1
             heatmap /= counts
             heatmaps.append(heatmap)
         return heatmaps
@@ -151,29 +168,28 @@ class Vivit(ptl.LightningModule, ABC):
                    'predictions': predictions.cpu().detach().numpy(),
                    'vid_path': batch['vid_path'],
                    'className': batch['className']}
-        if self.config.get('zoom_in_scale', 0) > 0:
+        if (self.config.get('zoom_in_scale', 1) > 1 and
+                self.config.get('rand_crop_rate', 0.0) == 0.0):
             predictions_zoomin = outputs['p_zoomin'].argmax(dim=-1)
             df_pred.update({'predictions_zoomin': predictions_zoomin.cpu().detach().numpy()})
         df_pred = pd.DataFrame(df_pred)
         df_pred['is_correct'] = df_pred['target'] == df_pred['predictions']
         self.df_predictions.append(df_pred)
         log = {'batch_error_rate': 1 - df_pred['is_correct'].mean()}
-        if self.config.get('zoom_in_scale', 0) > 0:
+        if (self.config.get('zoom_in_scale', 1) > 1 and
+                self.config.get('rand_crop_rate', 0.0) == 0.0):
             df_pred['is_correct_zoomin'] = df_pred['target'] == df_pred['predictions_zoomin']
             log.update({'batch_zoomin_err_rate': 1 - df_pred['is_correct_zoomin'].mean()})
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
-        if self.val_steps % self.config.get('val_clip_steps', 3000) == 0:
-            sav_dir = os.path.join(self.val_pred_dir, 'iter_{:03d}'.format(self.val_steps))
+        # Save predictions
+        if self.val_steps % self.config.get('val_clip_steps', 1000) == 0:
+            sav_dir = os.path.join(self.val_pred_dir, 'iter_{:04d}'.format(self.val_steps))
             os.makedirs(sav_dir, exist_ok=True)
-            if self.config.get('zoom_in_scale', 0) > 0:
-                heatmaps = self.cam_zoomin(batch[self.video_key])
+            if (self.config.get('zoom_in_scale', 1) > 1 and
+                    self.config.get('rand_crop_rate', 0.0) == 0.0):
+                heatmaps = self.cam_zoomin(batch[self.video_key], predictions)
             else:
-                batch_cams = outputs['cam'][torch.arange(outputs['cam'].size(0)), :, predictions]
-                clip_size = batch[self.video_key][0][0].shape[:2] + (256,)
-                heatmaps = heats_cube(batch_cams,
-                                      cube_size=(224, 224, 256),
-                                      cubelet_size=16,
-                                      target_size=clip_size)
+                heatmaps = self.cam(batch[self.video_key], predictions)
             for hm, clip, vid in zip(heatmaps, batch[self.video_key], batch['id']):
                 blended_heatmap = video_utils.video_alpha_blending(hm.detach().cpu().numpy(), clip)
                 video_utils.save3d(os.path.join(sav_dir, vid + '.mp4'), blended_heatmap)
@@ -183,7 +199,8 @@ class Vivit(ptl.LightningModule, ABC):
     def on_validation_epoch_end(self):
         df_pred = pd.concat(self.df_predictions)
         log = {'val_error_rate': 1 - df_pred['is_correct'].mean()}
-        if self.config.get('zoom_in_scale', 0) > 0:
+        if (self.config.get('zoom_in_scale', 1) > 1 and
+                self.config.get('rand_crop_rate', 0.0) == 0.0):
             log.update({'val_zoomin_error_rate': 1 - df_pred['is_correct_zoomin'].mean()})
         self.log_dict(log, batch_size=self.config['batch_size'], prog_bar=True)
         output_path = self.config['val_prediction_fstr'].format(epoch=self.epoch)
