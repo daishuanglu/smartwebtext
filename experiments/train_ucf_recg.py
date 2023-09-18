@@ -3,7 +3,9 @@ import os
 import random
 
 import numpy as np
+import pandas as pd
 import pims
+from tqdm import tqdm
 from preprocessors import pipelines
 from utils import train_utils, data_utils, video_utils
 from models import video_recognition
@@ -35,7 +37,7 @@ def main():
     args = parser.parse_args()
     # For local debugging
     #class args:
-    #    config = "config/vivit_crop_cam_ucf_recg.yaml"
+    #    config = "config/vivit_cam_ucf_recg.yaml"
     config = train_utils.read_config(args.config)
     if not config.get("skip_prep_data", False):
         pipelines.ucf_recognition(config['dataset_dir'], config['train_val_ratio'])
@@ -104,6 +106,15 @@ def main():
             monitor=config['monitor'],
             logger_path=logger_dir)
     print('-----------------  done training ----------------------------')
+    latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name'])
+    model = train_utils.load(model_obj, latest_ckpt_path, strict=False)
+    df_eval = pd.read_csv(pipelines.UCF_RECG_TRAIN_SPLIT_CSV.format(split='val'))
+    output_fpath = 'evaluation/ucf_recg/ucf_blended_cam/%s/{vid}.mp4' % config['model_name']
+    os.makedirs(os.path.dirname(output_fpath), exist_ok=True)
+    for _, row in tqdm(df_eval.iterrows(), total=len(df_eval)):
+        viz = model.blended_cam(row[pipelines.UCF_CLIP_PATH])
+        vid = os.path.basename(row[pipelines.UCF_CLIP_PATH]).split('.')[0]
+        video_utils.save3d(output_fpath.format(vid=vid), viz)
 
 
 if __name__ == '__main__':

@@ -9,6 +9,7 @@ d='val_pred'
 e="setup"
 f="model"
 g="log"
+h="evaluation"
 if [ $1 == $g ]
 then
   echo "download lightning logs to shud@192.168.0.XX..."
@@ -66,4 +67,10 @@ if [ $1 == $d ]
 then
     echo "download validation predictions from shud@192.168.0.XX..."
     scp -r shud@$IP:/home/shud/$fdir/val_predictions ./
+fi
+if [ $1 == $h ]
+then
+    echo "download evaluation results from shud@192.168.0.XX..."
+    mkdir -p evaluation_sync
+    scp -r shud@$IP:/home/shud/$fdir/evaluation/* evaluation_sync
 fi
