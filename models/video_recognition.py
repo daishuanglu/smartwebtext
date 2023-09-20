@@ -29,35 +29,29 @@ def heats_cube(heats, cubelet_size, cube_size, target_size=None):
     nrows = cube_size[0]//cubelet_size[0]
     ncols = cube_size[1]//cubelet_size[1]
     nlen = cube_size[2]//cubelet_size[2]
-    heats = heats.view(bsize, nrows, ncols, nlen)
+    heats = heats.view(bsize, nlen, nrows, ncols)
     #heats = heats.transpose(3, 1)
     heats = heats.unsqueeze(1)
     if target_size is None:
         target_size = cube_size
     # bsize* 1 * 14 * 14 * 16 -> bsize * 1 * 224*224*256
-    #heats = F.upsample(heats, scale_factor=cubelet_size, mode='nearest')
-    heats = F.interpolate(heats, size=target_size, mode='trilinear')
-    heats = heats.squeeze(1)
-    #heats = heats.transpose(1, 3)
-    return heats
+    # mini-batch x channels x [optional depth] x [optional height] x width.
+    heats = F.interpolate(heats, size=target_size[::-1], mode='trilinear')
+    heats = heats.transpose(2, 4)
+    return heats.squeeze(1)
 
 
 class Vivit(ptl.LightningModule, ABC):
-    def __init__(self, config, video_key, target_key, num_classes, zoomin_video_key=None):
+    def __init__(self, config, video_key, target_key, num_classes):
         super().__init__()
         self.video_key = video_key
         self.target_key = target_key
         self.num_classes = num_classes
-        self.zoomin_video_key = zoomin_video_key
         self.config = config
         self.image_processor = VivitImageProcessor.from_pretrained(
             "google/vivit-b-16x2-kinetics400")
         self.model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
         self.dense_pool_emb = nn.Linear(768, num_classes)
-        if (self.config.get('zoom_in_scale', 1) > 1 and
-                self.config.get('rand_crop_rate', 0.0) == 0.0):
-            #self.zoom_in_model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
-            self.dense_pool_zoomin_emb = nn.Linear(768, num_classes)
         self.ce = nn.CrossEntropyLoss()
         self.df_predictions = []
         self.epoch = 0
@@ -65,24 +59,6 @@ class Vivit(ptl.LightningModule, ABC):
         self.val_steps = 0
         self.val_pred_dir = os.path.dirname(self.config['val_prediction_fstr'])
         os.makedirs(self.val_pred_dir, exist_ok=True)
-
-    def rand_crop_logits(self, batch_videos, pooled_seq):
-        output_logits = []
-        for frames in batch_videos:
-            frame_size = frames[0].shape
-            crop_size = (frame_size[0] // self.config['zoom_in_scale'],
-                         frame_size[1] // self.config['zoom_in_scale'])
-            cropped_frames = list(
-                self.cropped_frames(frames, crop_size, sample_a_crop=True))[0][1]
-            inputs_zoomin = self.image_processor([cropped_frames], return_tensors="pt")
-            inputs_zoomin = inputs_zoomin.to(train_utils.device)
-            outputs_zoomin = self.model(**inputs_zoomin)
-            encoded_seq_zoomin = outputs_zoomin.last_hidden_state * pooled_seq.unsqueeze(1)
-            p_encoded_seq_zoomin = torch.sigmoid(encoded_seq_zoomin)
-            pooled_zoomin_seq = torch.mean(p_encoded_seq_zoomin, dim=1)
-            logits_zoomin = self.dense_pool_zoomin_emb(pooled_zoomin_seq)
-            output_logits.append(logits_zoomin)
-        return torch.cat(output_logits, 0)
 
     def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
         inputs = self.image_processor(batch[self.video_key], return_tensors="pt")
@@ -95,21 +71,17 @@ class Vivit(ptl.LightningModule, ABC):
         pooled_seq = torch.mean(p_encoded_seq, dim=1)
         logits = self.dense_pool_emb(pooled_seq)
         p = F.softmax(logits, dim=-1)
-        cam = self.dense_pool_emb(encoded_seq)
+        cam = self.dense_pool_emb(p_encoded_seq)
+        #cam = self.dense_pool_emb(encoded_seq)
         loss = None
-        p_zoomin = None
         if compute_loss:
+            weight_loss_0 = F.relu(-self.dense_pool_emb.weight).mean()
+            weight_loss_1 = ((1 - self.dense_pool_emb.weight.sum(1)) ** 2).mean()
             targets = torch.tensor(batch[self.target_key]).to(p.device)
-            loss = self.ce(logits, targets.long())
-            if (self.config.get('zoom_in_scale', 1) > 1 and
-                    self.config.get('rand_crop_rate', 0.0) == 0.0):
-                logits_zoomin = self.rand_crop_logits(batch[self.video_key], pooled_seq)
-                p_zoomin = F.softmax(logits_zoomin, dim=-1)
-                loss += self.ce(logits_zoomin, targets.long())
-                p_zoomin = p_zoomin.cpu().detach()
+            loss = self.ce(logits, targets.long()) + weight_loss_0 + weight_loss_1
+            #loss += 0.0001 * (cam.max() - cam.min) ** 2
         return {'p': p.cpu().detach(),
                 'loss': loss,
-                'p_zoomin': p_zoomin,
                 'cam': cam.cpu().detach()}
 
     def training_step(self, batch, batch_nb):
@@ -119,40 +91,6 @@ class Vivit(ptl.LightningModule, ABC):
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
         return {'loss': outputs['loss']}
 
-    def cropped_frames(self, frames, crop_size, sample_a_crop=False):
-        frame_size = frames[0].shape
-        positions = video_utils.frame_crop_positions(frame_size[0], frame_size[1], crop_size)
-        if sample_a_crop:
-            positions = [random.choice(positions)]
-        for x,y in positions:
-            crop_frames = [f[x:x + crop_size[0], y:y + crop_size[1], :] for f in frames]
-            yield (x, y), crop_frames
-
-    def cropped_cam(self, batch_videos, predictions):
-        heatmaps = []
-        for frames in batch_videos:
-            frame_size = frames[0].shape
-            crop_size = (frame_size[0] // self.config['zoom_in_scale'],
-                         frame_size[1] // self.config['zoom_in_scale'])
-            heatmap = torch.zeros(frame_size[:2] + (256,)).to(train_utils.device)
-            counts = torch.zeros_like(heatmap)
-            for (x, y), crop_frames in self.cropped_frames(frames, crop_size, sample_a_crop=False):
-                inputs = self.image_processor([crop_frames], return_tensors="pt")
-                inputs = inputs.to(train_utils.device)
-                outputs = self.model(**inputs)
-                cam = self.dense_pool_zoomin_emb(outputs.last_hidden_state)
-                batch_cams = cam[torch.arange(cam.size(0)), :, predictions]
-                clip_size = crop_frames[0].shape[:2] + (len(crop_frames),)
-                hm = heats_cube(batch_cams,
-                                cube_size=(224, 224, 32),  # Vivit 3D input clip size
-                                cubelet_size=(16, 16, 2),  # Vivit base tubelet size
-                                target_size=clip_size)[0]
-                heatmap[x:x+crop_size[0], y:y+crop_size[1], :] += hm.detach()
-                counts[x:x+crop_size[0], y:y+crop_size[1], :] += 1
-            heatmap /= counts
-            heatmaps.append(heatmap)
-        return heatmaps
-
     def validation_step(self, batch, batch_nb):
         outputs = self.forward(batch, compute_loss=True)
         predictions = outputs['p'].argmax(dim=-1)
@@ -160,34 +98,22 @@ class Vivit(ptl.LightningModule, ABC):
                    'predictions': predictions.cpu().detach().numpy(),
                    'vid_path': batch['vid_path'],
                    'className': batch['className']}
-        if (self.config.get('zoom_in_scale', 1) > 1 and
-                self.config.get('rand_crop_rate', 0.0) == 0.0):
-            predictions_zoomin = outputs['p_zoomin'].argmax(dim=-1)
-            df_pred.update({'predictions_zoomin': predictions_zoomin.cpu().detach().numpy()})
         df_pred = pd.DataFrame(df_pred)
         df_pred['is_correct'] = df_pred['target'] == df_pred['predictions']
         self.df_predictions.append(df_pred)
         log = {'batch_error_rate': 1 - df_pred['is_correct'].mean()}
-        if (self.config.get('zoom_in_scale', 1) > 1 and
-                self.config.get('rand_crop_rate', 0.0) == 0.0):
-            df_pred['is_correct_zoomin'] = df_pred['target'] == df_pred['predictions_zoomin']
-            log.update({'batch_zoomin_err_rate': 1 - df_pred['is_correct_zoomin'].mean()})
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
         # Save predictions
         if self.val_steps % self.config.get('val_clip_steps', 1000) == 0:
             sav_dir = os.path.join(self.val_pred_dir, 'iter_{:04d}'.format(self.val_steps))
             os.makedirs(sav_dir, exist_ok=True)
-            if (self.config.get('zoom_in_scale', 1) > 1 and
-                    self.config.get('rand_crop_rate', 0.0) == 0.0):
-                heatmaps = self.cam_zoomin(batch[self.video_key], predictions)
-            else:
-                batch_cams = outputs['cam'][torch.arange(outputs['cam'].size(0)), :, predictions]
-                clip_size = batch[self.video_key][0][0].shape[:2] \
+            batch_cams = outputs['cam'][torch.arange(outputs['cam'].size(0)), :, predictions]
+            clip_size = batch[self.video_key][0][0].shape[:2] \
                             + (len(batch[self.video_key][0]),)
-                heatmaps = heats_cube(batch_cams,
-                                      cube_size=(224, 224, 32),  # Vivit 3D input clip size
-                                      cubelet_size=(16, 16, 2),  # Vivit base tubelet size
-                                      target_size=clip_size)
+            heatmaps = heats_cube(batch_cams,
+                                  cube_size=(224, 224, 32),  # Vivit 3D input clip size
+                                  cubelet_size=(16, 16, 2),  # Vivit base tubelet size
+                                  target_size=clip_size)
             for hm, clip, vid in zip(heatmaps, batch[self.video_key], batch['id']):
                 blended_heatmap = video_utils.video_alpha_blending(hm.detach().cpu().numpy(), clip)
                 video_utils.save3d(os.path.join(sav_dir, vid + '.mp4'), blended_heatmap)
@@ -197,9 +123,6 @@ class Vivit(ptl.LightningModule, ABC):
     def on_validation_epoch_end(self):
         df_pred = pd.concat(self.df_predictions)
         log = {'val_error_rate': 1 - df_pred['is_correct'].mean()}
-        if (self.config.get('zoom_in_scale', 1) > 1 and
-                self.config.get('rand_crop_rate', 0.0) == 0.0):
-            log.update({'val_zoomin_error_rate': 1 - df_pred['is_correct_zoomin'].mean()})
         self.log_dict(log, batch_size=self.config['batch_size'], prog_bar=True)
         output_path = self.config['val_prediction_fstr'].format(epoch=self.epoch)
         df_pred.to_csv(output_path, index=False)

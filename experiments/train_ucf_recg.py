@@ -30,14 +30,14 @@ def load_ucf_frames(feature_dict,
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--config', required=True,
-        help='model training configuration path.')
-    args = parser.parse_args()
+    #parser = argparse.ArgumentParser()
+    #parser.add_argument(
+    #    '--config', required=True,
+    #    help='model training configuration path.')
+    #args = parser.parse_args()
     # For local debugging
-    #class args:
-    #    config = "config/vivit_cam_ucf_recg.yaml"
+    class args:
+        config = "config/vivit_cam_ucf_recg.yaml"
     config = train_utils.read_config(args.config)
     if not config.get("skip_prep_data", False):
         pipelines.ucf_recognition(config['dataset_dir'], config['train_val_ratio'])
@@ -61,7 +61,6 @@ def main():
     model_obj = video_recognition.Vivit(
         config,
         video_key=pipelines.UCF_VIDEO,
-        zoomin_video_key=pipelines.UCF_VIDEO_ZOOMIN,
         target_key=pipelines.UCF_CLASS_IDX,
         num_classes=pipelines.UCF_NUM_CLASSES)
     print("model initialized. ")

@@ -28,11 +28,11 @@ def video_heatmap_colors(heats):
 
 def video_alpha_blending(heats, ori_imgs):
     blended = []
+    heats = cv2.normalize(heats, None, 0, 255, cv2.NORM_MINMAX)
     for ih, ori_img in enumerate(ori_imgs):
         img = np.uint8(ori_img)
         heat = heats[:, :, ih]
-        normalized_data = cv2.normalize(heat, None, 0, 255, cv2.NORM_MINMAX)
-        hm = cv2.applyColorMap(np.uint8(normalized_data), cv2.COLORMAP_JET)
+        hm = cv2.applyColorMap(np.uint8(heat), cv2.COLORMAP_JET)
         combined_image = cv2.addWeighted(img, 0.7, hm, 0.3, 0)
         combined_image = cv2.cvtColor(combined_image, cv2.COLOR_BGR2RGB)
         blended.append(combined_image)
