@@ -6,7 +6,7 @@ dataset_dir: 'D:/video_datasets/UCF-101'
 val_prediction_fstr: 'val_predictions/vivit_cam_ucf_recg/{epoch:03d}.csv'
 val_clip_steps: 3000
 #Model
-skip_training: True
+skip_training: False
 clip_len: 32
 frame_sample_rate: 1
 map_loss_factor: 0.0

@@ -36,7 +36,7 @@ def heats_cube(heats, cubelet_size, cube_size, target_size=None):
         target_size = cube_size
     # bsize* 1 * 14 * 14 * 16 -> bsize * 1 * 224*224*256
     # mini-batch x channels x [optional depth] x [optional height] x width.
-    heats = F.interpolate(heats, size=target_size[::-1], mode='trilinear')
+    heats = F.interpolate(heats, size=target_size[::-1], mode='trilinear', align_corners=False)
     heats = heats.transpose(2, 4)
     return heats.squeeze(1)
 
@@ -72,13 +72,16 @@ class Vivit(ptl.LightningModule, ABC):
         logits = self.dense_pool_emb(pooled_seq)
         p = F.softmax(logits, dim=-1)
         cam = self.dense_pool_emb(p_encoded_seq)
-        #cam = self.dense_pool_emb(encoded_seq)
+        # Try GradCAM
+        #gradients = self.dense_pool_emb.grad[0]
+        #weights = torch.mean(gradients, dim=(1, 2), keepdim=True)
+        #cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
         loss = None
         if compute_loss:
-            weight_loss_0 = F.relu(-self.dense_pool_emb.weight).mean()
-            weight_loss_1 = ((1 - self.dense_pool_emb.weight.sum(1)) ** 2).mean()
+            #weight_loss_0 = F.relu(-self.dense_pool_emb.weight).mean()
+            #weight_loss_1 = ((1 - self.dense_pool_emb.weight.sum(1)) ** 2).mean()
             targets = torch.tensor(batch[self.target_key]).to(p.device)
-            loss = self.ce(logits, targets.long()) + weight_loss_0 + weight_loss_1
+            loss = self.ce(logits, targets.long())
             #loss += 0.0001 * (cam.max() - cam.min) ** 2
         return {'p': p.cpu().detach(),
                 'loss': loss,
