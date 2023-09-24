@@ -1,0 +1,30 @@
+model_name: "vivit_tam_mixed"
+datasets:
+  ucf-101-action-recg:
+    pipeline_fn: "ucf_recognition_splits_df"
+    train_val_ratio: [0.95, 0.05]
+    #dataset_dir: "D:/video_datasets/UCF-101"
+    dataset_dir: '/home/shud/video_datasets/UCF-101'
+  kth-action-recg:
+    pipeline_fn: "kth_action_recg_splits_df"
+    #kth_action_home: 'C:/Users/shud0/KTHactions'
+    kth_action_home: '/home/shud/video_datasets/KTHactions'
+skip_prep_data: False
+val_prediction_fstr: "val_predictions/vivit_tam_mixed/{epoch:03d}.csv"
+val_clip_steps: 3000
+#Model
+skip_training: False
+clip_len: 32
+frame_sample_rate: 1
+max_input_length: 512
+map_loss_factor: 0.0
+#Settings
+learning_rate: 0.0001
+monitor: 'val_error_rate'
+epochs: 100
+batch_size: 1
+clear_cache: False
+limit:
+logger_dir: 'lightning_logs'
+resume_ckpt: False
+

@@ -13,6 +13,8 @@ from models import video_text
 
 def load_ucf_frames(feature_dict, clip_len, frame_sample_rate):
     vf = pims.Video(feature_dict[pipelines.CLIP_PATH_KEY])
+    if feature_dict[pipelines.FRAME_ID_KEY]:
+        vf = [vf[i] for i in feature_dict[pipelines.FRAME_ID_KEY]]
     indices = video_utils.sample_frame_indices(
         clip_len=clip_len, frame_sample_rate=frame_sample_rate, seg_len=len(vf))
     frames = [np.array(vf[i]) for i in indices]
@@ -21,27 +23,28 @@ def load_ucf_frames(feature_dict, clip_len, frame_sample_rate):
 
 def negative_text(feature_dict):
     rand_sample = {pipelines.TEXT_KEY: feature_dict[pipelines.TEXT_KEY],
-                   pipelines.TARGET_KEY: feature_dict[pipelines.TARGET_KEY]}
+                   pipelines.TARGET_KEY: 1.0}
     pos = random.random() > 0.5
     rand_sample[pipelines.TARGET_KEY] = float(pos)
     if not pos:
         rand_sample[pipelines.TEXT_KEY] = sample_generator.rand_line_from_file(
-            rand_sample[pipelines.TEXT_KEY], pipelines.VIDTXT_ALL_TEXTS, max_tries=3)
+            rand_sample[pipelines.TEXT_KEY], pipelines.VIDTXT_ALL_TEXTS, max_retry=3)
     return rand_sample
 
 
 def main():
     class args:
-        config = "config/video_text_cam_ucf.yaml"
+        config = "config/video_text_cam_mixed.yaml"
+        #config = "config/video_text_cam_ucf.yaml"
     config = train_utils.read_config(args.config)
     if not config.get("skip_prep_data", False):
-        pipelines.ucf_video_text(config['dataset_dir'], config['train_val_ratio'])
+        pipelines.mixed_video_text(config['datasets'])
     train_ucf_recg_features = {
         pipelines.CLIP_PATH_KEY: (lambda x: str(x)),
         pipelines.TEXT_KEY: (lambda x: str(x)),
-        pipelines.TARGET_KEY: (lambda x: float(x)),
         pipelines.CLASS_NAME: (lambda x: str(x)),
-        pipelines.SAMPLE_ID_KEY: lambda x: str(x)
+        pipelines.SAMPLE_ID_KEY: lambda x: str(x),
+        pipelines.FRAME_ID_KEY: lambda x: [int(i) for i in str(x).strip().split(pipelines.FRAME_ID_SEP) if i]
     }
     train_ucf_recg_cols = {
         pipelines.VIDEO_KEY: lambda x: load_ucf_frames(
@@ -65,7 +68,7 @@ def main():
     if not config.get('skip_training', False):
         print("create training -validation dataloader")
         train_dl = data_utils.get_context_csv_data_loader(
-            pipelines.VIDTXT_UCF_TRAIN_SPLIT_CSV.format(split='train'),
+            pipelines.VIDTXT_TRAIN_SPLIT_CSV.format(split='train'),
             train_ucf_recg_features,
             col_fns=train_ucf_recg_cols,
             batch_size=config['batch_size'],
@@ -77,7 +80,7 @@ def main():
             limit=config.get('limit', None)
         )
         val_dl = data_utils.get_context_csv_data_loader(
-            pipelines.VIDTXT_UCF_TRAIN_SPLIT_CSV.format(split='val'),
+            pipelines.VIDTXT_TRAIN_SPLIT_CSV.format(split='val'),
             train_ucf_recg_features,
             col_fns=train_ucf_recg_cols,
             batch_size=config['batch_size'],

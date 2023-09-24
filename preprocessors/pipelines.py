@@ -1,3 +1,5 @@
+import collections
+
 import numpy as np
 import os
 import random
@@ -20,16 +22,6 @@ PRNEWS_PARAGRAPH_SEP = ';;;;'
 PRNEWS_DATA_SEP = '\t'
 PRNEWS_MUST_CONTAIN_COLS = ['Text', 'Company']
 PRNEWS_EVAL_DIR = 'evaluation/prnews_accounting'
-
-KTH_ACTION_SRC_CSV = 'data_model/kth_actions.csv'
-KTH_ACTIONS = ['boxing', 'handclapping', 'handwaving', 'jogging', 'running', 'walking']
-KTH_ACTION_DATA_CSV_SEP = ','
-KTH_SPLIT_COL = 'split'
-KTH_SPLIT_CSV = 'data_model/kth_actions_{split}.csv'
-KTH_FRAME_FEATURE_SEP = ';'
-#KTH_ACTION_HOME = '/home/shuangludai/KTHactions'
-KTH_VIDEO_FILE = '{action}/person{pid}_{action}_{var}_uncomp.avi'
-
 FASTTEXT_HOME = 'fasttext'
 
 
@@ -176,13 +168,34 @@ def a2d_video_images(dataset_dir, label_colors_json, train_val_ratio=[0.95, 0.05
         df_split = df_meta[df_meta['split'] == split]
         df_split.drop(columns=['split'])
         df_split.to_csv(A2D_IMAGE_SPLIT_CSV.format(split=split), index=False)
-    return
 
 
-def kth_action_video_nobbox(kth_action_home):
+SAMPLE_ID_KEY = 'id'
+CLIP_PATH_KEY = 'clip_path'
+TEXT_KEY = 'text'
+TARGET_KEY = 'target'
+SPLIT_KEY = 'split'
+CLASS_NAME = 'class_name'
+VIDEO_KEY = 'video'
+FRAME_ID_KEY = 'selected_fids'
+FRAME_ID_SEP = ';'
+DATASET_KEY = 'dataset_name'
+
+VID_TXT_COMMON = [SAMPLE_ID_KEY, CLIP_PATH_KEY, SPLIT_KEY, CLASS_NAME]
+VID_TXT_OPT = [FRAME_ID_KEY]
+KTH_ACTION_SRC_CSV = 'data_model/kth_actions.csv'
+KTH_ACTIONS = ['boxing', 'handclapping', 'handwaving', 'jogging', 'running', 'walking']
+KTH_ACTION_DATA_CSV_SEP = ','
+KTH_SPLIT_CSV = 'data_model/kth_actions_{split}.csv'
+KTH_FRAME_FEATURE_SEP = ';'
+#KTH_ACTION_HOME = '/home/shuangludai/KTHactions'
+KTH_VIDEO_FILE = '{action}/person{pid}_{action}_{var}_uncomp.avi'
+
+
+def kth_action_recg_splits_df(kth_action_home, **kwargs):
     fpath = os.path.join(kth_action_home, '00sequences.txt')
     splits = {}
-    df = dict(video=[], pid=[], action=[], split=[], fids=[])
+    df = collections.defaultdict(list)
     with open(fpath, 'r') as f:
         for line in f.readlines():
             if 'training:' in line.lower():
@@ -194,35 +207,31 @@ def kth_action_video_nobbox(kth_action_home):
             if 'frames' in line.lower():
                 vid_file, kfs = line.strip().split('frames')
                 vid_file = vid_file.strip()
-                #fids = sum([frange.split('-') for frange in kfs.strip().split(', ')], [])
-                #fids = [int(id) - 1 for id in fids]
                 fid_ranges = [frange.split('-') for frange in kfs.strip().split(', ')]
                 fids = []
                 for start, end in fid_ranges:
                     fids += list(range(int(start), int(end)))
-                df['fids'].append(';'.join(list(map(str, fids))))
+                df[FRAME_ID_KEY].append(FRAME_ID_SEP.join(list(map(str, fids))))
                 pid, action, var = vid_file.split('_')
                 pid = pid.split('person')[1]
-                df['pid'].append(int(pid))
-                df['action'].append(action)
+                #df[PERSON_ID_KEY].append(int(pid))
+                df[CLASS_NAME].append(action)
                 vid_file_basepath = KTH_VIDEO_FILE.format(action=action, pid=pid, var=var)
                 vid_file_path = os.path.join(kth_action_home, vid_file_basepath)
-                df['video'].append(vid_file_path)
-                df['split'].append(splits[pid])
+                df[CLIP_PATH_KEY].append(vid_file_path)
+                df[SPLIT_KEY].append(splits[pid])
+                df[SAMPLE_ID_KEY].append(os.path.basename(vid_file_path).split('.')[0])
     df = pd.DataFrame(df)
-    for split in df['split'].unique():
-        df_split = df[df['split'] == split]
-        df_split.drop(columns=['split'])
-        df_split.to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
-    return
+    return df
 
-SAMPLE_ID_KEY = 'id'
-CLIP_PATH_KEY = 'clip_path'
-TEXT_KEY = 'text'
-TARGET_KEY = 'target'
-SPLIT_KEY = 'split'
-CLASS_NAME = 'class_name'
-VIDEO_KEY = 'video'
+
+def kth_action_video_nobbox(kth_action_home):
+    df = kth_action_recg_splits_df(kth_action_home)
+    for split in df[SPLIT_KEY].unique():
+        df_split = df[df[SPLIT_KEY] == split]
+        df_split.to_csv(KTH_SPLIT_CSV.format(split=split), index=False)
+
+
 UCF_CLASS_IDX = 'classId'
 UCF_RECG_SPLIT_PATH = \
     '{dataset_dir}/ucfTrainTestlist/{split}list{no:02d}.txt'
@@ -238,7 +247,7 @@ INVALID_UCF_RECG_VIDS = ['PushUps/v_PushUps_g16_c04.avi',
                          'HorseRiding/v_HorseRiding_g14_c02.avi']
 
 
-def ucf_recognition_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05]):
+def ucf_recognition_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwargs):
     class_index_fpath = UCF_RECG_CLS_INDEX_PATH.format(dataset_dir=dataset_dir)
     cls_ind = pd.read_csv(
         class_index_fpath, header=None, delimiter=' ', names=[UCF_CLASS_IDX, 'name'])
@@ -273,7 +282,7 @@ def ucf_recognition(dataset_dir, train_val_ratio=[0.95, 0.05]):
 
 
 VIDTXT_UCF_TRAIN_SPLIT_CSV = 'data_model/video_text_ucf_recg_{split}.csv'
-VIDTXT_ALL_TEXTS = 'data_model/video_text_all_texts.txt'
+VIDTXT_UCF_ALL_TEXTS = 'data_model/video_text_ucf_all_texts.txt'
 
 
 def ucf_video_text(dataset_dir, train_val_ratio=[0.95, 0.05]):
@@ -285,6 +294,32 @@ def ucf_video_text(dataset_dir, train_val_ratio=[0.95, 0.05]):
         df[TEXT_KEY] = df[CLASS_NAME]
         df.to_csv(VIDTXT_UCF_TRAIN_SPLIT_CSV.format(split=split), index=False)
         all_texts.update(set(df[TEXT_KEY].dropna()))
+    with open(VIDTXT_UCF_ALL_TEXTS, 'w') as f:
+        for t in sorted(all_texts):
+            f.write(t + '\n')
+
+
+VIDTXT_TRAIN_SPLIT_CSV = 'data_model/video_text_mixed_{split}.csv'
+VIDTXT_ALL_TEXTS = 'data_model/video_text_mixed_all_texts.txt'
+
+
+def mixed_video_text(dataset_configs):
+    dfs = []
+    for ds_name, config in dataset_configs.items():
+        fn = globals().get(config['pipeline_fn'])
+        df = fn(**config)
+        cols = df.columns.intersection(VID_TXT_COMMON + VID_TXT_OPT)
+        df = df[cols]
+        df[DATASET_KEY] = ds_name
+        dfs.append(df)
+    dfs = pd.concat(dfs)
+    all_texts = set()
+    for split in dfs[SPLIT_KEY].unique():
+        df = dfs[dfs[SPLIT_KEY] == split]
+        df[TEXT_KEY] = df[CLASS_NAME]
+        df.to_csv(VIDTXT_TRAIN_SPLIT_CSV.format(split=split), index=False)
+        all_texts.update(set(df[TEXT_KEY].dropna()))
     with open(VIDTXT_ALL_TEXTS, 'w') as f:
         for t in sorted(all_texts):
             f.write(t + '\n')
+

@@ -9,9 +9,9 @@ def rand_letters(n):
     return random_word
 
 
-def rand_line_from_file(target_value: str, fpath: str, max_tries=10, **kwargs):
+def rand_line_from_file(target_value: str, fpath: str, max_retry=10, **kwargs):
     total_lines = sum(1 for _ in open(fpath, 'r'))
-    for _ in range(max_tries):
+    for _ in range(max_retry):
         rand_line_no = random.randint(1, total_lines)
         rand_line = linecache.getline(fpath, rand_line_no).strip()
         rand_line = rand_line.lower()
