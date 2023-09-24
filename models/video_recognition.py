@@ -1,6 +1,5 @@
 import os
-import random
-
+from preprocessors import pipelines
 import pandas as pd
 import torch
 import pytorch_lightning as ptl
@@ -72,17 +71,10 @@ class Vivit(ptl.LightningModule, ABC):
         logits = self.dense_pool_emb(pooled_seq)
         p = F.softmax(logits, dim=-1)
         cam = self.dense_pool_emb(p_encoded_seq)
-        # Try GradCAM
-        #gradients = self.dense_pool_emb.grad[0]
-        #weights = torch.mean(gradients, dim=(1, 2), keepdim=True)
-        #cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
         loss = None
         if compute_loss:
-            #weight_loss_0 = F.relu(-self.dense_pool_emb.weight).mean()
-            #weight_loss_1 = ((1 - self.dense_pool_emb.weight.sum(1)) ** 2).mean()
             targets = torch.tensor(batch[self.target_key]).to(p.device)
             loss = self.ce(logits, targets.long())
-            #loss += 0.0001 * (cam.max() - cam.min) ** 2
         return {'p': p.cpu().detach(),
                 'loss': loss,
                 'cam': cam.cpu().detach()}
@@ -99,8 +91,8 @@ class Vivit(ptl.LightningModule, ABC):
         predictions = outputs['p'].argmax(dim=-1)
         df_pred = {'target': batch[self.target_key],
                    'predictions': predictions.cpu().detach().numpy(),
-                   'vid_path': batch['vid_path'],
-                   'className': batch['className']}
+                   pipelines.CLIP_PATH_KEY: batch[pipelines.CLIP_PATH_KEY],
+                   pipelines.CLASS_NAME: batch[pipelines.CLASS_NAME]}
         df_pred = pd.DataFrame(df_pred)
         df_pred['is_correct'] = df_pred['target'] == df_pred['predictions']
         self.df_predictions.append(df_pred)
