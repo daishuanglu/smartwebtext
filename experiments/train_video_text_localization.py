@@ -14,7 +14,7 @@ from models import video_text
 def load_ucf_frames(feature_dict, clip_len, frame_sample_rate):
     vf = pims.Video(feature_dict[pipelines.CLIP_PATH_KEY])
     if feature_dict[pipelines.FRAME_ID_KEY]:
-        vf = [vf[i] for i in feature_dict[pipelines.FRAME_ID_KEY]]
+        vf = [vf[i] for i in feature_dict[pipelines.FRAME_ID_KEY] if i < len(vf)]
     indices = video_utils.sample_frame_indices(
         clip_len=clip_len, frame_sample_rate=frame_sample_rate, seg_len=len(vf))
     frames = [np.array(vf[i]) for i in indices]

@@ -181,6 +181,11 @@ FRAME_ID_KEY = 'selected_fids'
 FRAME_ID_SEP = ';'
 DATASET_KEY = 'dataset_name'
 
+
+def a2d_ref_text_splits_df(dataset_dir, label_colors_json, train_val_ratio=[0.95, 0.05]):
+    return
+
+
 VID_TXT_COMMON = [SAMPLE_ID_KEY, CLIP_PATH_KEY, SPLIT_KEY, CLASS_NAME]
 VID_TXT_OPT = [FRAME_ID_KEY]
 KTH_ACTION_SRC_CSV = 'data_model/kth_actions.csv'
