@@ -13,7 +13,6 @@ val_predictions/
 lightning_logs/
 lightning_logs_sync/
 fasttext/
-debug_info/
 **/__pycache__
 *.ipynb_checkpoints/
 # filetype to ignore
