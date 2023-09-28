@@ -7,7 +7,9 @@ from abc import ABC
 from typing import Dict
 import pims
 import numpy as np
-from transformers import VivitImageProcessor, VivitModel
+from transformers import VivitImageProcessor, VivitModel, AutoImageProcessor, ViTModel
+from transformers import AutoFeatureExtractor, SwinModel, Swinv2Model
+
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -22,7 +24,6 @@ def mean_pooling(token_embeddings, attention_mask):
 
 
 def heats_cube(heats, cubelet_size, cube_size, target_size=None):
-    heats = heats[:, 1:]
     bsize, n_cubelets = heats.size()
     # 16 * 14 * 14 -> 16 * 224 * 224
     nrows = cube_size[0]//cubelet_size[0]
@@ -40,44 +41,50 @@ def heats_cube(heats, cubelet_size, cube_size, target_size=None):
     return heats.squeeze(1)
 
 
-class Vivit(ptl.LightningModule, ABC):
+def blended_cam(model,
+                clip_path,
+                clip_len,
+                frame_sample_rate,
+                cubelet_size=(16, 16, 2)):
+    vf = pims.Video(clip_path)
+    indices = video_utils.sample_frame_indices(
+            clip_len=clip_len,
+            frame_sample_rate=frame_sample_rate,
+            seg_len=len(vf))
+    batch = {model.video_key: [[np.array(vf[i]) for i in indices]]}
+    outputs = model(batch)
+    predictions = outputs['p'].argmax(dim=1).detach().cpu()
+    cam = outputs.pop('cam').detach().cpu()
+    batch_cams = cam[torch.arange(cam.size(0)), :, predictions]
+    clip_size = batch[model.video_key][0][0].shape[:2] + (len(batch[model.video_key][0]),)
+    hm = heats_cube(batch_cams,
+                    cube_size=(224, 224, 32),  # Vivit 3D input clip size
+                    cubelet_size=cubelet_size,  # Vivit base tubelet size
+                    target_size=clip_size)[0]
+    blended_heatmap = video_utils.video_alpha_blending(hm.numpy(), batch[model.video_key][0])
+    return blended_heatmap
+
+
+class VideoRecognitionEngine(ptl.LightningModule, ABC):
     def __init__(self, config, video_key, target_key, num_classes):
         super().__init__()
         self.video_key = video_key
         self.target_key = target_key
         self.num_classes = num_classes
         self.config = config
-        self.image_processor = VivitImageProcessor.from_pretrained(
-            "google/vivit-b-16x2-kinetics400")
-        self.model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
-        self.dense_pool_emb = nn.Linear(768, num_classes)
+        self.image_processor = None
+        self.model = None
         self.ce = nn.CrossEntropyLoss()
         self.df_predictions = []
         self.epoch = 0
         self.val_cam = None
         self.val_steps = 0
+        self.cubelet_size = self.config['cubelet_size']
         self.val_pred_dir = os.path.dirname(self.config['val_prediction_fstr'])
         os.makedirs(self.val_pred_dir, exist_ok=True)
 
     def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
-        inputs = self.image_processor(batch[self.video_key], return_tensors="pt")
-        inputs = inputs.to(train_utils.device)
-        outputs = self.model(**inputs)
-        # batch_size * 3137 (16*16*16 + 1) * embed_size (768)
-        encoded_seq = outputs.last_hidden_state
-        p_encoded_seq = torch.sigmoid(encoded_seq)
-        # batch_size * embed_size (768)
-        pooled_seq = torch.mean(p_encoded_seq, dim=1)
-        logits = self.dense_pool_emb(pooled_seq)
-        p = F.softmax(logits, dim=-1)
-        cam = self.dense_pool_emb(p_encoded_seq)
-        loss = None
-        if compute_loss:
-            targets = torch.tensor(batch[self.target_key]).to(p.device)
-            loss = self.ce(logits, targets.long())
-        return {'p': p.cpu().detach(),
-                'loss': loss,
-                'cam': cam.cpu().detach()}
+        raise NotImplementedError('video Recognition model is not implemented.')
 
     def training_step(self, batch, batch_nb):
         outputs = self.forward(batch, compute_loss=True)
@@ -107,9 +114,9 @@ class Vivit(ptl.LightningModule, ABC):
                             + (len(batch[self.video_key][0]),)
             heatmaps = heats_cube(batch_cams,
                                   cube_size=(224, 224, 32),  # Vivit 3D input clip size
-                                  cubelet_size=(16, 16, 2),  # Vivit base tubelet size
+                                  cubelet_size=self.cubelet_size,  # Vivit base tubelet size
                                   target_size=clip_size)
-            for hm, clip, vid in zip(heatmaps, batch[self.video_key], batch['id']):
+            for hm, clip, vid in zip(heatmaps, batch[self.video_key], batch[pipelines.SAMPLE_ID_KEY]):
                 blended_heatmap = video_utils.video_alpha_blending(hm.detach().cpu().numpy(), clip)
                 video_utils.save3d(os.path.join(sav_dir, vid + '.mp4'), blended_heatmap)
         self.val_steps += 1
@@ -128,21 +135,112 @@ class Vivit(ptl.LightningModule, ABC):
     def configure_optimizers(self):
         return [torch.optim.AdamW(params=self.parameters(), lr=self.config['learning_rate'])], []
 
-    def blended_cam(self, clip_path):
-        vf = pims.Video(clip_path)
-        indices = video_utils.sample_frame_indices(
-            clip_len=self.config['clip_len'],
-            frame_sample_rate=self.config['frame_sample_rate'],
-            seg_len=len(vf))
-        batch = {self.video_key: [[np.array(vf[i]) for i in indices]]}
-        outputs = self(batch, compute_loss=False)
-        predictions = outputs['p'].argmax(dim=1).detach().cpu()
-        cam = outputs.pop('cam').detach().cpu()
-        batch_cams = cam[torch.arange(cam.size(0)), :, predictions]
-        clip_size = batch[self.video_key][0][0].shape[:2] + (len(batch[self.video_key][0]),)
-        hm = heats_cube(batch_cams,
-                        cube_size=(224, 224, 32),  # Vivit 3D input clip size
-                        cubelet_size=(16, 16, 2),  # Vivit base tubelet size
-                        target_size=clip_size)[0]
-        blended_heatmap = video_utils.video_alpha_blending(hm.numpy(), batch[self.video_key][0])
-        return blended_heatmap
+
+class VivitRecgModel(VideoRecognitionEngine):
+    def __init__(self, config, video_key, target_key, num_classes):
+        super().__init__(config, video_key, target_key, num_classes)
+        self.image_processor = VivitImageProcessor.from_pretrained(
+            "google/vivit-b-16x2-kinetics400")
+        self.model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
+        self.dense_pool_emb = nn.Linear(768, num_classes)
+
+    def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
+        inputs = self.image_processor(batch[self.video_key], return_tensors="pt")
+        inputs = inputs.to(train_utils.device)
+        outputs = self.model(**inputs)
+        # batch_size * 3137 (16*16*16 + 1) * embed_size (768)
+        encoded_seq = outputs.last_hidden_state
+        p_encoded_seq = torch.sigmoid(encoded_seq)
+        # batch_size * embed_size (768)
+        pooled_seq = torch.mean(p_encoded_seq, dim=1)
+        logits = self.dense_pool_emb(pooled_seq)
+        p = F.softmax(logits, dim=-1)
+        cam = self.dense_pool_emb(p_encoded_seq)[:, 1:]
+        loss = None
+        if compute_loss:
+            targets = torch.tensor(batch[self.target_key]).to(train_utils.device)
+            loss = self.ce(logits, targets.long())
+        return {'p': p.cpu().detach(),
+                'loss': loss,
+                'cam': cam.cpu().detach()}
+
+
+class VitRecgModel(VideoRecognitionEngine):
+    def __init__(self, config, video_key, target_key, num_classes):
+        super().__init__(config, video_key, target_key, num_classes)
+        hf_pretrained_model_name = 'google/vit-base-patch16-224-in21k'
+        self.image_processor = AutoImageProcessor.from_pretrained(hf_pretrained_model_name)
+        self.model = ViTModel.from_pretrained(hf_pretrained_model_name)
+        self.dense_pool_emb = nn.Linear(768, num_classes)
+
+    def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
+        batch_videos = sum(batch[self.video_key], [])
+        inputs = self.image_processor(batch_videos, return_tensors="pt")
+        inputs = inputs.to(train_utils.device)
+        outputs = self.model(**inputs)
+        # num_of_frames * 197 (16*16 + 1) * embed_size (768)
+        encoded_seq = outputs.last_hidden_state
+        p_encoded_seq = torch.sigmoid(encoded_seq)
+        #num_of_frames * embed_size (768)
+        pooled_seq = torch.mean(p_encoded_seq, dim=1)
+        # num_of_frames * num_classes
+        logits = self.dense_pool_emb(pooled_seq)
+        # batch_size * clip_len * num_classes
+        p = F.softmax(logits, dim=-1)
+        # batch_size * num_classes
+        p = p.view((-1, self.config['clip_len']) + p.shape[1:]).mean(1)
+        # num_of_frames * 196 * num_classes
+        cam = self.dense_pool_emb(p_encoded_seq)[:, 1:]
+        cam = cam.view((-1, self.config['clip_len']) + cam.shape[1:])
+        nrows, ncols =  224 // self.cubelet_size[0], 224 // self.cubelet_size[0]
+        cam = cam.reshape(-1, int(self.config['clip_len']* nrows*ncols), self.num_classes)
+        loss = None
+        if compute_loss:
+            targets = torch.tensor(batch[self.target_key]).to(train_utils.device)
+            targets = targets.unsqueeze(1).repeat(1, self.config['clip_len']).view(-1)
+            loss = self.ce(logits, targets.long())
+        return {'p': p.cpu().detach(),
+                'loss': loss,
+                'cam': cam.cpu().detach()}
+
+
+class SwinRecgModel(VideoRecognitionEngine):
+    def __init__(self, config, video_key, target_key, num_classes):
+        super().__init__(config, video_key, target_key, num_classes)
+        self.image_processor = AutoFeatureExtractor.from_pretrained(
+            "microsoft/swin-base-patch4-window7-224")
+        self.model = SwinModel.from_pretrained(
+            "microsoft/swin-base-patch4-window7-224")
+        self.dense_pool_emb = nn.Linear(1024, num_classes)
+
+    def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
+        batch_videos = sum(batch[self.video_key], [])
+        inputs = self.image_processor(batch_videos, return_tensors="pt")
+        inputs = inputs.to(train_utils.device)
+        outputs = self.model(**inputs)
+        # num_of_frames * 197 (16*16 + 1) * embed_size (768)
+        encoded_seq = outputs.last_hidden_state
+        p_encoded_seq = torch.sigmoid(encoded_seq)
+        #num_of_frames * embed_size (768)
+        pooled_seq = torch.mean(p_encoded_seq, dim=1)
+        # num_of_frames * num_classes
+        logits = self.dense_pool_emb(pooled_seq)
+        # batch_size * clip_len * num_classes
+        p = F.softmax(logits, dim=-1)
+        # batch_size * num_classes
+        p = p.view((-1, self.config['clip_len']) + p.shape[1:]).mean(1)
+        # num_of_frames * 197 * num_classes
+        cam = self.dense_pool_emb(p_encoded_seq)
+        # batch_size * clip_len * 197 * num_classes
+        cam = cam.view((-1, self.config['clip_len']) + cam.shape[1:])
+        nrows, ncols = 224 // self.cubelet_size[0], 224 // self.cubelet_size[0]
+        cam = cam.reshape(-1, int(self.config['clip_len'] * nrows * ncols), self.num_classes)
+        loss = None
+        if compute_loss:
+            targets = torch.tensor(batch[self.target_key]).to(train_utils.device)
+            targets = targets.unsqueeze(1).repeat(1, self.config['clip_len']).view(-1)
+            loss = self.ce(logits, targets.long())
+        return {'p': p.cpu().detach(),
+                'loss': loss,
+                'cam': cam.cpu().detach()}
+

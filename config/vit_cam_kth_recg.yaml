@@ -1,0 +1,26 @@
+model_name: 'vit_cam_kth_recg'
+encoder_type: "vit"
+skip_prep_data: False
+datasets:
+  kth-action-recg:
+    pipeline_fn: "kth_action_recg_splits_df"
+    kth_action_home: "C:/Users/shud0/KTHactions"
+
+val_prediction_fstr: 'val_predictions/vit_cam_kth_recg/{epoch:03d}.csv'
+val_clip_steps: 3000
+#Model
+cubelet_size: [16, 16, 1]
+skip_training: False
+clip_len: 32
+frame_sample_rate: 1
+map_loss_factor: 0.0
+#Settings
+learning_rate: 0.0001
+monitor: 'val_error_rate'
+epochs: 100
+batch_size: 1
+clear_cache: False
+limit:
+logger_dir: 'lightning_logs'
+resume_ckpt: False
+

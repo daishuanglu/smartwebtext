@@ -1,0 +1,12 @@
+
+SAMPLE_ID_KEY = 'id'
+CLIP_PATH_KEY = 'clip_path'
+TEXT_KEY = 'text'
+TARGET_KEY = 'target'
+SPLIT_KEY = 'split'
+CLASS_NAME = 'class_name'
+VIDEO_KEY = 'video'
+FRAME_ID_KEY = 'selected_fids'
+FRAME_ID_SEP = ';'
+DATASET_KEY = 'dataset_name'
+CLASS_ID_KEY = 'classId'

@@ -1,14 +1,12 @@
-model_name: 'vivit_cam_ucf_recg'
+model_name: 'vivit_cam_kth_recg'
 encoder_type: "vivit"
 skip_prep_data: False
 datasets:
-  ucf-101-action-recg:
-    pipeline_fn: "ucf_recognition_splits_df"
-    train_val_ratio: [0.95, 0.05]
-    dataset_dir: "D:/video_datasets/UCF-101"
-    #dataset_dir: '/home/shud/video_datasets/UCF-101'
+  kth-action-recg:
+    pipeline_fn: "kth_action_recg_splits_df"
+    kth_action_home: "C:/Users/shud0/KTHactions"
 
-val_prediction_fstr: 'val_predictions/vivit_cam_ucf_recg/{epoch:03d}.csv'
+val_prediction_fstr: 'val_predictions/vivit_cam_kth_recg/{epoch:03d}.csv'
 val_clip_steps: 3000
 #Model
 cubelet_size: [16, 16, 2]

@@ -1,17 +1,17 @@
-model_name: 'vivit_cam_ucf_recg'
-encoder_type: "vivit"
+model_name: 'swin_cam_ucf_recg'
+encoder_type: "swin"
+train_val_ratio: [0.95, 0.05]
 skip_prep_data: False
 datasets:
   ucf-101-action-recg:
     pipeline_fn: "ucf_recognition_splits_df"
     train_val_ratio: [0.95, 0.05]
     dataset_dir: "D:/video_datasets/UCF-101"
-    #dataset_dir: '/home/shud/video_datasets/UCF-101'
 
-val_prediction_fstr: 'val_predictions/vivit_cam_ucf_recg/{epoch:03d}.csv'
+val_prediction_fstr: 'val_predictions/swin_cam_ucf_recg/{epoch:03d}.csv'
 val_clip_steps: 3000
 #Model
-cubelet_size: [16, 16, 2]
+cubelet_size: [32, 32, 1]
 skip_training: False
 clip_len: 32
 frame_sample_rate: 1
