@@ -86,12 +86,13 @@ class VideoTextDiscLocalization(ptl.LightningModule, ABC):
         pooled_seq_video = torch.mean(p_encoded_seq_video, dim=1)
         # Text encoding
         inputs_text = self.text_encoder_input(batch[self.text_key])
+        inputs_text['token_type_ids'] += 1
         outputs_text = self.text_model(**inputs_text)
         encoded_seq_text = outputs_text.last_hidden_state
         p_encoded_seq_text = torch.sigmoid(encoded_seq_text)
         pooled_seq_text = mean_pooling(p_encoded_seq_text, inputs_text['attention_mask'])
         # Video Text correlation
-        pooled_seq = pooled_seq_text * pooled_seq_video
+        pooled_seq = pooled_seq_text + pooled_seq_video
         logits = self.dense_pool_emb(pooled_seq)
         p = torch.sigmoid(logits).squeeze(-1)
         # Video text activation mapping

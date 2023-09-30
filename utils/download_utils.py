@@ -24,6 +24,7 @@ def download_clip_from_youtube(video_url, local_path):
     
     return {'status': 'success'}
 
+
 def download_file_from_google_drive(id, destination):
     URL = "https://docs.google.com/uc?export=download"
 
@@ -38,12 +39,14 @@ def download_file_from_google_drive(id, destination):
 
     save_response_content(response, destination)
 
+
 def get_confirm_token(response):
     for key, value in response.cookies.items():
         if key.startswith('download_warning'):
             return value
 
     return None
+
 
 def save_response_content(response, destination):
     CHUNK_SIZE = 32768
@@ -79,7 +82,8 @@ def download_url(url, save_path, chunk_size=None):
         wget.download(url, bar=bar_progress, out=save_path)
         print(f"File downloaded to: {save_path}")
 
-def dl(url, output_fname):
+
+def dl(url, output_fname=None):
     filename = url.split('/')[-1] if output_fname is None else output_fname
     if url.startswith(r'https://drive.google.com/'):
         fid = extract_google_drive_file_id(url)
@@ -99,6 +103,14 @@ def metadata_txt(url, dataset_dir, output_fname=None):
         sav_path = os.path.join(dataset_dir, output_fname)
     print('moving to', sav_path)
     shutil.move(filename, sav_path)
+
+
+def concat_files(input_files, output_file):
+    with open(output_file, 'w') as outfile:
+        # Loop through the input files and write their content to the output file
+        for input_file in input_files:
+            with open(input_file, 'r') as infile:
+                outfile.write(infile.read())
 
 
 def unzip_file(filename, sav_dir, type='zip'):

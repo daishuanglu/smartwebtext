@@ -5,6 +5,7 @@ from preprocessors.bsds import *
 from preprocessors.kth import *
 from preprocessors.prnews import *
 from preprocessors.ucf import *
+from preprocessors.something_something_v2 import *
 
 
 VID_TXT_COLS = [SAMPLE_ID_KEY, CLIP_PATH_KEY, SPLIT_KEY, CLASS_NAME, FRAME_ID_KEY]
