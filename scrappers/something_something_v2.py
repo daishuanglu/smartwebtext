@@ -42,7 +42,15 @@ PARTS_URLS = [
     'https://drive.google.com/file/d/1cjw3nHv7Eci_DX5VPPN3BJbjCt9QeS5J/view?usp=sharing',
     'https://drive.google.com/file/d/1wddyFg_FnUDGi9yKevdwGZAASQsg1s8b/view?usp=sharing',
     'https://drive.google.com/file/d/1PhDdWe8k32fGrbjytrQiTN6AW2vH-2b6/view?usp=sharing',
-
+    'https://drive.google.com/file/d/1jB8S_mbOgnkvtaK5krv-NE7Zusy-8_Rf/view?usp=sharing',
+    'https://drive.google.com/file/d/1AkUOEaGZbHfMQ_ukDOv_Byx2fhFKqu8n/view?usp=sharing',
+    'https://drive.google.com/file/d/1Vlsdr4WIYYnPIJ7QO80x7lZhlT3TArTY/view?usp=sharing',
+    'https://drive.google.com/file/d/1WhSqoV-BoaimNeK21gqC9MBPCiBR8uCR/view?usp=sharing',
+    'https://drive.google.com/file/d/1zMbIfGwBc5bFi6X-yeSuDC_1E2TNY8Eb/view?usp=sharing',
+    'https://drive.google.com/file/d/1QO_em7GRVwfItZyE81oThh5Qj9f_yrFY/view?usp=sharing',
+    'https://drive.google.com/file/d/1RWuZlni-b0AnaL0304XmH_E4EBi-jadc/view?usp=sharing',
+    'https://drive.google.com/file/d/1QrY0WkdgeSHEZHdmcMth2H2gh2FelTxf/view?usp=sharing',
+    'https://drive.google.com/file/d/1heW15GyZ-jDpBC1OGzp6t1ZugADB4isT/view?usp=sharing'
 ]
 LABEL_URL = 'https://drive.google.com/file/d/1nMZtU59z31TsNqTKN_-wN9H1DIanzHJt/view?usp=sharing'
 LABEL_FILENAME = 'something-something-label.zip'
