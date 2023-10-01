@@ -52,7 +52,7 @@ There should be 70 videos with id 1 , 30 videos with id 2 in each txt file.
 
 import argparse
 import os
-
+import glob
 from utils import download_utils
 
 
@@ -69,5 +69,8 @@ if __name__=='__main__':
     #class args:
     #    dataset_dir = 'D:/video_datasets/hmdb51'
     os.makedirs(args.dataset_dir, exist_ok=True)
-    download_utils.zip(VIDEO_URL, args.dataset_dir, type='rar')
+    fname = download_utils.dl(VIDEO_URL)
+    download_utils.unzip_file(fname, args.dataset_dir)
+    for fpath in glob.glob(os.path.join(args.dataset_dir, '*.rar')):
+        download_utils.unzip_file(fpath, args.dataset_dir, type='rar')
     download_utils.zip(ANNO_URL, args.dataset_dir, type='rar')
