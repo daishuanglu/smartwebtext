@@ -67,3 +67,8 @@ def hmdb51_video_text(dataset_dir):
     with open(HMDB51_VIDTXT_ALL_TEXTS, 'w') as f:
         for t in sorted(all_texts):
             f.write(t + '\n')
+
+if __name__ == '__main__':
+    dataset_dir = 'D:/video_datasets/hmdb51'
+    df = hmdb51_splits_df(dataset_dir)
+    print(df)

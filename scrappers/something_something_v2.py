@@ -57,7 +57,6 @@ LABEL_FILENAME = 'something-something-label.zip'
 INFO_URL = 'https://drive.google.com/file/d/1MNfj3tYUKxQ68wb0n6FwAETsRA1BtEr3/view?usp=drive_link'
 INFO_FILENAME = 'something-something-info.pdf'
 DS_PARTS_FILENAME = '20bn-something-something-v2-{part:02d}.zip'
-N_PARTS = 20
 
 
 if __name__=='__main__':

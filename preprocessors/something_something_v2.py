@@ -57,3 +57,9 @@ def ss_v2_video_text(dataset_dir):
     with open(SS_V2_VIDTXT_ALL_TEXTS, 'w') as f:
         for t in sorted(all_texts):
             f.write(t + '\n')
+
+
+if __name__ == '__main__':
+    dataset_dir = 'D:/video_datasets/ss_v2'
+    df = something_something_v2_splits_df(dataset_dir)
+    print(df)
