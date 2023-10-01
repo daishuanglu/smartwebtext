@@ -70,7 +70,7 @@ if __name__=='__main__':
     #    dataset_dir = 'D:/video_datasets/hmdb51'
     os.makedirs(args.dataset_dir, exist_ok=True)
     fname = download_utils.dl(VIDEO_URL)
-    download_utils.unzip_file(fname, args.dataset_dir)
+    download_utils.unzip_file(fname, args.dataset_dir, type='rar')
     for fpath in glob.glob(os.path.join(args.dataset_dir, '*.rar')):
         download_utils.unzip_file(fpath, args.dataset_dir, type='rar')
     download_utils.zip(ANNO_URL, args.dataset_dir, type='rar')
