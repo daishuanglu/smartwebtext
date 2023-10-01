@@ -40,9 +40,12 @@ def ucf_recognition_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwarg
             df_split[SPLIT_KEY] = split
             dfs.append(df_split)
     dfs = pd.concat(dfs)
-    #dfs = dfs.drop_duplicates(subset=[SAMPLE_ID_KEY], keep='first')
-    dfs[SPLIT_KEY] = dfs[SPLIT_KEY].apply(
-        lambda x: np.random.choice(['train', 'val'], p=train_val_ratio) if x == 'train' else x)
+    df_test = dfs[dfs[SPLIT_KEY] == 'test']
+    df_train = dfs[dfs[SPLIT_KEY] == 'train']
+    df_train = df_train.drop_duplicates(subset=[SAMPLE_ID_KEY], keep='first')
+    df_train[SPLIT_KEY] = df_train[SPLIT_KEY].apply(
+        lambda x: np.random.choice(['train', 'val'], p=train_val_ratio))
+    dfs = pd.concat([df_train, df_test])
     dfs[CLASS_ID_KEY] -= 1
     return dfs
 
