@@ -23,14 +23,14 @@ def load_frames(feature_dict,
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--config', required=True,
-        help='model training configuration path.')
-    args = parser.parse_args()
+    #parser = argparse.ArgumentParser()
+    #parser.add_argument(
+    #    '--config', required=True,
+    #    help='model training configuration path.')
+    #args = parser.parse_args()
     # For local debugging
-    #class args:
-    #    config = "config/vit_cam_kth_recg.yaml"
+    class args:
+        config = "config/vit_cam_ucf_recg.yaml"
     config = train_utils.read_config(args.config)
     if not config.get("skip_prep_data", False):
         pipelines.video_recognition(config['datasets'])
