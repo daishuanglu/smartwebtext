@@ -77,3 +77,4 @@ if __name__=='__main__':
     for file_path in glob.glob(os.path.join(args.dataset_dir, '*.rar')):
         os.remove(file_path)
         print(f"Removed: {file_path}")
+    os.remove(fname)
