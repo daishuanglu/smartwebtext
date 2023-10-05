@@ -1,0 +1,26 @@
+model_name: 'vit_cam_hmdb51_recg'
+encoder_type: "vit"
+skip_prep_data: False
+datasets:
+  hmdb51-action-recg:
+    pipeline_fn: "hmdb51_splits_df"
+    dataset_dir: "D:/video_datasets/hmdb51"
+
+val_prediction_fstr: 'val_predictions/vit_cam_hmdb51_recg/{epoch:03d}.csv'
+val_clip_steps: 3000
+#Model
+cubelet_size: [16, 16, 1]
+skip_training: False
+clip_len: 32
+frame_sample_rate: 1
+map_loss_factor: 0.0
+#Settings
+learning_rate: 0.0001
+monitor: 'val_error_rate'
+epochs: 100
+batch_size: 1
+clear_cache: False
+limit:
+logger_dir: 'lightning_logs'
+resume_ckpt: False
+

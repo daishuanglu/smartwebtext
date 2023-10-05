@@ -16,7 +16,7 @@ import glob
 from preprocessors.constants import *
 
 
-HMDB51_CLIP_PATH = '{root}/{vid}'
+HMDB51_CLIP_PATH = '{root}/{action}/{vid}'
 HMDB51_ANNO_DIR = '{root}/testTrainMulti_7030_splits'
 HMDB51_ANNO_FILE = '{action}_test_split{no:01d}.txt'
 HMDB51_SPLIT_MAP = {'1': 'train', '0': 'val', '2': 'test'}
@@ -31,21 +31,23 @@ def hmdb51_splits_df(dataset_dir, **kwargs):
     actions = []
     dfs = []
     for f in files:
-        a = f.split('_test_')[0]
+        a = os.path.basename(f).split('_test_')[0]
         if a not in actions:
             actions.append(a)
         for i in range(1, 4):
             fsplit = os.path.join(anno_dir, HMDB51_ANNO_FILE.format(action=a, no=i))
-            df_split = pd.read_csv(fsplit, sep=' ', dtype=str, header=None, names=['vid', 'split_no'])
+            df_split = pd.read_csv(fsplit, sep=' ', dtype=str, header=None, names=['vid', 'split_no', 'empty'])
             df_split[SPLIT_KEY] = df_split['split_no'].map(HMDB51_SPLIT_MAP)
             df_split[CLASS_NAME] = a
             df_split[CLASS_ID_KEY] = actions.index(a)
             df_split[SAMPLE_ID_KEY] = df_split['vid'].apply(lambda x: x.split('.')[0])
             df_split[CLIP_PATH_KEY] = df_split['vid'].apply(
-                lambda x: HMDB51_CLIP_PATH.format(root=dataset_dir, vid=x))
+                lambda x: HMDB51_CLIP_PATH.format(root=dataset_dir, action=a, vid=x))
             df_split[TEXT_KEY] = df_split['vid'].apply(lambda x: x.split('_np')[0])
             dfs.append(df_split)
-    return pd.concat(dfs)
+    dfs = pd.concat(dfs)
+    dfs = dfs.drop_duplicates(subset=[SPLIT_KEY, SAMPLE_ID_KEY], keep='first')
+    return dfs
 
 
 def hmdb51_recognition(dataset_dir):

@@ -5,6 +5,7 @@ from preprocessors.bsds import *
 from preprocessors.kth import *
 from preprocessors.prnews import *
 from preprocessors.ucf import *
+from preprocessors.hmdb51 import *
 from preprocessors.something_something_v2 import *
 
 

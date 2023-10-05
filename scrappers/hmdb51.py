@@ -74,3 +74,6 @@ if __name__=='__main__':
     for fpath in glob.glob(os.path.join(args.dataset_dir, '*.rar')):
         download_utils.unzip_file(fpath, args.dataset_dir, type='rar')
     download_utils.zip(ANNO_URL, args.dataset_dir, type='rar')
+    for file_path in glob.glob(os.path.join(args.dataset_dir, '*.rar')):
+        os.remove(file_path)
+        print(f"Removed: {file_path}")
