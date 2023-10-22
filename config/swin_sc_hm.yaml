@@ -1,0 +1,14 @@
+model_name: 'swin_sparse_coding'
+encoder_type: "swin"
+pretrained_model_name: "microsoft/swin-base-patch4-window7-224"
+cubelet_size: [32, 32, 1]
+clip_len: 32
+frame_sample_rate: 1
+omp_eps: 0.001
+iter_max: 3000
+#omp_verbose: True
+shuffle: True
+eval_hmdb51:
+  path: "C:/Users/shud0/Desktop/accountingInfoRetrieval-main/smartwebtext/data_model/video_recognition_hmdb51_test.csv"
+  output_fpath: "evaluation/hmdb51_blended_cam/%s/{vid}.mp4"
+  num_classes: 51

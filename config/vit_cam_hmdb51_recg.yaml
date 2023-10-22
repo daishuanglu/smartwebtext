@@ -5,7 +5,7 @@ datasets:
   hmdb51-action-recg:
     pipeline_fn: "hmdb51_splits_df"
     dataset_dir: "D:/video_datasets/hmdb51"
-
+num_classes: 51
 val_prediction_fstr: 'val_predictions/vit_cam_hmdb51_recg/{epoch:03d}.csv'
 val_clip_steps: 3000
 #Model

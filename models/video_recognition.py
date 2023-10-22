@@ -7,13 +7,15 @@ from abc import ABC
 from typing import Dict
 import pims
 import numpy as np
+from p_tqdm import p_map
 from transformers import VivitImageProcessor, VivitModel, AutoImageProcessor, ViTModel
 from transformers import AutoFeatureExtractor, SwinModel, Swinv2Model
 
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import video_utils, train_utils
+from modules import omp
+from utils import video_utils, train_utils, metric_utils
 
 #Mean Pooling - Take attention mask into account for correct averaging
 def mean_pooling(token_embeddings, attention_mask):
@@ -66,7 +68,7 @@ def blended_cam(model,
 
 
 class VideoRecognitionEngine(ptl.LightningModule, ABC):
-    def __init__(self, config, video_key, target_key, num_classes):
+    def __init__(self, config, video_key, target_key, num_classes, **kwargs):
         super().__init__()
         self.video_key = video_key
         self.target_key = target_key
@@ -80,8 +82,9 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
         self.val_cam = None
         self.val_steps = 0
         self.cubelet_size = self.config['cubelet_size']
-        self.val_pred_dir = os.path.dirname(self.config['val_prediction_fstr'])
-        os.makedirs(self.val_pred_dir, exist_ok=True)
+        if self.config.get('val_prediction_fstr', ''):
+            self.val_pred_dir = os.path.dirname(self.config['val_prediction_fstr'])
+            os.makedirs(self.val_pred_dir, exist_ok=True)
 
     def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
         raise NotImplementedError('video Recognition model is not implemented.')
@@ -137,7 +140,7 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
 
 
 class VivitRecgModel(VideoRecognitionEngine):
-    def __init__(self, config, video_key, target_key, num_classes):
+    def __init__(self, config, video_key, target_key, num_classes, **kwargs):
         super().__init__(config, video_key, target_key, num_classes)
         self.image_processor = VivitImageProcessor.from_pretrained(
             "google/vivit-b-16x2-kinetics400")
@@ -166,7 +169,7 @@ class VivitRecgModel(VideoRecognitionEngine):
 
 
 class VitRecgModel(VideoRecognitionEngine):
-    def __init__(self, config, video_key, target_key, num_classes):
+    def __init__(self, config, video_key, target_key, num_classes, **kwargs):
         super().__init__(config, video_key, target_key, num_classes)
         hf_pretrained_model_name = 'google/vit-base-patch16-224-in21k'
         self.image_processor = AutoImageProcessor.from_pretrained(hf_pretrained_model_name)
@@ -205,7 +208,7 @@ class VitRecgModel(VideoRecognitionEngine):
 
 
 class SwinRecgModel(VideoRecognitionEngine):
-    def __init__(self, config, video_key, target_key, num_classes):
+    def __init__(self, config, video_key, target_key, num_classes, **kwargs):
         super().__init__(config, video_key, target_key, num_classes)
         self.image_processor = AutoFeatureExtractor.from_pretrained(
             "microsoft/swin-base-patch4-window7-224")
@@ -244,3 +247,61 @@ class SwinRecgModel(VideoRecognitionEngine):
                 'loss': loss,
                 'cam': cam.cpu().detach()}
 
+
+class EncodedSparseCoding(ptl.LightningModule, ABC):
+    def __init__(self, config, video_key, **kwargs):
+        super().__init__()
+        if config['encoder_type'] == 'swin':
+            self.image_processor = AutoFeatureExtractor.from_pretrained(
+                    config['pretrained_model_name'])
+            self.model = SwinModel.from_pretrained(config['pretrained_model_name'])
+        if config['encoder_type'] == 'vit':
+            self.image_processor = AutoImageProcessor.from_pretrained(
+                    config['pretrained_model_name'])
+            self.model = ViTModel.from_pretrained(config['pretrained_model_name'])
+        if config['encoder_type'] == 'vivit':
+            self.image_processor = VivitImageProcessor.from_pretrained(
+                    config['pretrained_model_name'])
+            self.model = VivitModel.from_pretrained(config['pretrained_model_name'])
+        self.video_key = video_key
+        self.config = config
+
+    def omp(self, encoded):
+        D, y = encoded[1:], encoded[0]
+        x = omp.matching_pursuit(y, D,
+                                 eps_min=self.config['omp_eps'],
+                                 iter_max=self.config['iter_max'],
+                                 verbose=self.config.get('verbose', False))
+        basis_amp_hm = (x.transpose() * D).mean(1)
+        return metric_utils.norm01(basis_amp_hm)
+
+    def forward(self, batch: Dict[str, torch.Tensor]):
+        if self.config['encoder_type'] != 'vivit':
+            batch_videos = sum(batch[self.video_key], [])
+            inputs = self.image_processor(batch_videos, return_tensors="pt")
+        else:
+            inputs = self.image_processor(batch[self.video_key], return_tensors="pt")
+        inputs = inputs.to(train_utils.device)
+        outputs = self.model(**inputs)
+        # num_of_frames * 197 (16*16 + 1) * embed_size (768)
+        e = torch.sigmoid(outputs['last_hidden_state'])
+        e = F.normalize(e, p=2, dim=-1)
+        cam = p_map(self.omp, list(e.detach().cpu().numpy()))
+        #cam = []
+        #for encoded in e.detach().cpu().numpy():
+        #    D, y = encoded[1:], encoded[0]
+        #    x = omp.matching_pursuit(y, D,
+        #                             eps_min=self.config['omp_eps'],
+        #                             iter_max=self.config['iter_max'],
+        #                             verbose=self.config.get('verbose', False))
+        #    basis_amp_hm = (x.transpose() * D).mean(1)
+        #    cam.append(metric_utils.norm01(basis_amp_hm))
+        # batch_size * clip_len * 197 * num_classes
+        cam = torch.from_numpy(np.stack(cam)).unsqueeze(-1)
+        if self.config['encoder_type'] != 'vivit':
+            cam = cam.view((-1, self.config['clip_len']) + cam.shape[1:], 1)
+            nrows, ncols = 224 // self.config['cubelet_size'][0], 224 // self.config['cubelet_size'][0]
+            cam = cam.reshape(-1, int(self.config['clip_len'] * nrows * ncols), 1)
+        return {'p': torch.ones(cam.shape[0], 1),
+                'loss': None,
+                'cam': cam.cpu().detach()}

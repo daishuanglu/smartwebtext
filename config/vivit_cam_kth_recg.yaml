@@ -5,7 +5,7 @@ datasets:
   kth-action-recg:
     pipeline_fn: "kth_action_recg_splits_df"
     kth_action_home: "C:/Users/shud0/KTHactions"
-
+num_classes: 6
 val_prediction_fstr: 'val_predictions/vivit_cam_kth_recg/{epoch:03d}.csv'
 val_clip_steps: 3000
 #Model

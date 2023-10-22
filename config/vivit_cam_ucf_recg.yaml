@@ -7,7 +7,7 @@ datasets:
     train_val_ratio: [0.95, 0.05]
     dataset_dir: "D:/video_datasets/UCF-101"
     #dataset_dir: '/home/shud/video_datasets/UCF-101'
-
+num_classes: 101
 val_prediction_fstr: 'val_predictions/vivit_cam_ucf_recg/{epoch:03d}.csv'
 val_clip_steps: 3000
 #Model

@@ -1,6 +1,10 @@
 import numpy as np
 
 
+def norm01(x):
+    return (x - x.min())/(x.max() - x.min())
+
+
 def pw_cos_sim(x, y):
     x_normalized = x / np.linalg.norm(x, axis=1, keepdims=True)
     y_normalized = y / np.linalg.norm(y, axis=1, keepdims=True)

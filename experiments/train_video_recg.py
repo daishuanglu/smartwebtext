@@ -23,14 +23,14 @@ def load_frames(feature_dict,
 
 
 def main():
-    #parser = argparse.ArgumentParser()
-    #parser.add_argument(
-    #    '--config', required=True,
-    #    help='model training configuration path.')
-    #args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--config', required=True,
+        help='model training configuration path.')
+    args = parser.parse_args()
     # For local debugging
-    class args:
-        config = "config/vivit_cam_hmdb51_recg.yaml"
+    #class args:
+    #    config = "config/vivit_cam_hmdb51_recg.yaml"
     config = train_utils.read_config(args.config)
     if not config.get("skip_prep_data", False):
         pipelines.video_recognition(config['datasets'])
@@ -61,7 +61,7 @@ def main():
         config,
         video_key=pipelines.VIDEO_KEY,
         target_key=pipelines.CLASS_ID_KEY,
-        num_classes=pipelines.UCF_NUM_CLASSES)
+        num_classes=config['num_classes'])
     print("model initialized. ")
     model_obj = model_obj.to(train_utils.device)
     print("model moved to device: ", train_utils.device)

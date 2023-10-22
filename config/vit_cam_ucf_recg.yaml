@@ -7,7 +7,7 @@ datasets:
     pipeline_fn: "ucf_recognition_splits_df"
     train_val_ratio: [0.95, 0.05]
     dataset_dir: "D:/video_datasets/UCF-101"
-
+num_classes: 101
 val_prediction_fstr: 'val_predictions/vit_cam_ucf_recg/{epoch:03d}.csv'
 val_clip_steps: 3000
 #Model
