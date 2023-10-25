@@ -107,14 +107,15 @@ def main():
     latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name'])
     model_obj = train_utils.load(model_obj, latest_ckpt_path, strict=False)
     df_eval = pd.read_csv(pipelines.VID_RECG_TRAIN_SPLIT_CSV.format(split='val'))
-    output_fpath = 'evaluation/ucf_recg/ucf_blended_cam/%s/{vid}.mp4' % config['model_name']
+    output_fpath = 'evaluation/ucf_blended_cam/%s/{vid}.mp4' % config['model_name']
     os.makedirs(os.path.dirname(output_fpath), exist_ok=True)
     for _, row in tqdm(df_eval.iterrows(), total=len(df_eval)):
-        viz = video_recognition.blended_cam(model=model_obj,
-                                            clip_path=row[pipelines.CLIP_PATH_KEY],
-                                            clip_len=config['clip_len'],
-                                            frame_sample_rate=config['frame_sample_rate'],
-                                            cubelet_size=config['cubelet_size'])
+        viz, hm, outputs = video_recognition.blended_cam(
+            model=model_obj,
+            clip_path=row[pipelines.CLIP_PATH_KEY],
+            clip_len=config['clip_len'],
+            frame_sample_rate=config['frame_sample_rate'],
+            cubelet_size=config['cubelet_size'])
         vid = os.path.basename(row[pipelines.CLIP_PATH_KEY]).split('.')[0]
         video_utils.save3d(output_fpath.format(vid=vid), viz)
 

@@ -61,8 +61,16 @@ def read_video_pyav(file_path, indices):
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
-def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+def sample_frame_indices(clip_len, frame_sample_rate, seg_len, padding=True):
     converted_len = int(clip_len * frame_sample_rate)
+    if converted_len >= seg_len:
+        indices = list(range(seg_len))
+        if padding:
+            n_front = (converted_len - seg_len) // 2
+            n_end = (converted_len - seg_len) // 2 + (converted_len - seg_len) % 2
+            return [indices[0]] * n_front + indices + [indices[1]] * n_end
+        else:
+            return indices
     end_idx = np.random.randint(converted_len, seg_len)
     start_idx = end_idx - converted_len
     indices = np.linspace(start_idx, end_idx, num=clip_len)

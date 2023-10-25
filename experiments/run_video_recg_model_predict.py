@@ -48,11 +48,11 @@ def main():
     #output_fpath = 'evaluation/ucf_recg/ucf_blended_cam/%s/{vid}.mp4' % config['model_name']
     os.makedirs(os.path.dirname(output_fpath), exist_ok=True)
     for vid, row in tqdm(df_eval.iterrows(), total=len(df_eval)):
-        viz = video_recognition.blended_cam(model=model,
-                                            clip_path=row[pipelines.CLIP_PATH_KEY],
-                                            clip_len=config['clip_len'],
-                                            frame_sample_rate=config['frame_sample_rate'],
-                                            cubelet_size=config['cubelet_size'])
+        viz, _, _ = video_recognition.blended_cam(model=model,
+                                                  clip_path=row[pipelines.CLIP_PATH_KEY],
+                                                  clip_len=config['clip_len'],
+                                                  frame_sample_rate=config['frame_sample_rate'],
+                                                  cubelet_size=config['cubelet_size'])
         video_utils.save3d(output_fpath.format(vid=vid), viz)
 
 

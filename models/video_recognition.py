@@ -64,7 +64,7 @@ def blended_cam(model,
                     cubelet_size=cubelet_size,  # Vivit base tubelet size
                     target_size=clip_size)[0]
     blended_heatmap = video_utils.video_alpha_blending(hm.numpy(), batch[model.video_key][0])
-    return blended_heatmap
+    return blended_heatmap, hm, outputs
 
 
 class VideoRecognitionEngine(ptl.LightningModule, ABC):
@@ -287,16 +287,6 @@ class EncodedSparseCoding(ptl.LightningModule, ABC):
         e = torch.sigmoid(outputs['last_hidden_state'])
         e = F.normalize(e, p=2, dim=-1)
         cam = p_map(self.omp, list(e.detach().cpu().numpy()))
-        #cam = []
-        #for encoded in e.detach().cpu().numpy():
-        #    D, y = encoded[1:], encoded[0]
-        #    x = omp.matching_pursuit(y, D,
-        #                             eps_min=self.config['omp_eps'],
-        #                             iter_max=self.config['iter_max'],
-        #                             verbose=self.config.get('verbose', False))
-        #    basis_amp_hm = (x.transpose() * D).mean(1)
-        #    cam.append(metric_utils.norm01(basis_amp_hm))
-        # batch_size * clip_len * 197 * num_classes
         cam = torch.from_numpy(np.stack(cam)).unsqueeze(-1)
         if self.config['encoder_type'] != 'vivit':
             cam = cam.view((-1, self.config['clip_len']) + cam.shape[1:], 1)
