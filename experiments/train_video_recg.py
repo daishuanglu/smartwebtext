@@ -1,6 +1,6 @@
 import argparse
 import os
-
+import json
 import numpy as np
 import pandas as pd
 import pims
@@ -32,7 +32,7 @@ def main():
     """
     # For local debugging
     class args:
-        config = "config/vivit_cam_a2d_recg.yaml"
+        config = "config/vivit_cam_a2d_mixed_recg.yaml"
     config = train_utils.read_config(args.config)
     if not config.get("skip_prep_data", False):
         pipelines.video_recognition(config['datasets'])
@@ -63,11 +63,16 @@ def main():
         model_cls = video_recognition.SwinRecgModel
     else:
         model_cls = video_recognition.VivitRecgModel
+    with open(pipelines.VID_RECG_TRAIN_CLSNAME_MAP, 'r') as f:
+        clsname_map = json.load(f)
+        print(clsname_map)
+        print(len(clsname_map), ' classes.')
     model_obj = model_cls(
         config,
         video_key=pipelines.VIDEO_KEY,
         target_key=pipelines.CLASS_ID_KEY,
-        num_classes=config['num_classes'])
+        clsname_map=clsname_map
+    )
     print("model initialized. ")
     model_obj = model_obj.to(train_utils.device)
     print("model moved to device: ", train_utils.device)

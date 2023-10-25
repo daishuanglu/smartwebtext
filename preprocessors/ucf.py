@@ -18,7 +18,9 @@ INVALID_UCF_RECG_VIDS = ['PushUps/v_PushUps_g16_c04.avi',
                          'HorseRiding/v_HorseRiding_g14_c02.avi']
 
 
-def ucf_recognition_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwargs):
+def ucf_recognition_splits_df(dataset_dir,
+                              train_val_ratio=[0.95, 0.05],
+                              **kwargs):
     class_index_fpath = UCF_RECG_CLS_INDEX_PATH.format(dataset_dir=dataset_dir)
     cls_ind = pd.read_csv(
         class_index_fpath, header=None, delimiter=' ', names=[CLASS_ID_KEY, CLASS_NAME])
@@ -50,7 +52,9 @@ def ucf_recognition_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwarg
     return dfs
 
 
-def ucf_recognition(dataset_dir, train_val_ratio=[0.95, 0.05]):
+def ucf_recognition(dataset_dir,
+                    train_val_ratio=[0.95, 0.05],
+                    **kwargs):
     dfs = ucf_recognition_splits_df(dataset_dir, train_val_ratio)
     for split in dfs[SPLIT_KEY].unique():
         df = dfs[dfs[SPLIT_KEY] == split]
@@ -61,7 +65,9 @@ VIDTXT_UCF_TRAIN_SPLIT_CSV = 'data_model/video_text_ucf_recg_{split}.csv'
 VIDTXT_UCF_ALL_TEXTS = 'data_model/video_text_ucf_all_texts.txt'
 
 
-def ucf_video_text(dataset_dir, train_val_ratio=[0.95, 0.05]):
+def ucf_video_text(dataset_dir,
+                   train_val_ratio=[0.95, 0.05],
+                   **kwargs):
     dfs = ucf_recognition_splits_df(dataset_dir, train_val_ratio)
     all_texts = set()
     for split in dfs[SPLIT_KEY].unique():

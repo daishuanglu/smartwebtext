@@ -1,14 +1,14 @@
-model_name: 'vivit_cam_a2d_recg'
+model_name: 'vivit_cam_a2d_actor_recg'
 encoder_type: "vivit"
-multiclass: True
-multiclass_sep: ";;;"
 skip_prep_data: False
 datasets:
-  a2d-action-actor-recg:
+  a2d-actor-recg:
     pipeline_fn: "a2d_recognition_splits_df"
     dataset_dir: "D:/video_datasets"
+    train_val_ratio: [0.95, 0.05]
     #dataset_dir: '/home/shud/video_datasets/UCF-101'
-num_classes: 80
+    class_col: "actor"
+
 val_prediction_fstr: 'val_predictions/vivit_cam_a2d_recg/{epoch:03d}.csv'
 val_clip_steps: 1000
 #Model

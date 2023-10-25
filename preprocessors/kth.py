@@ -13,7 +13,7 @@ KTH_FRAME_FEATURE_SEP = ';'
 KTH_VIDEO_FILE = '{action}/person{pid}_{action}_{var}_uncomp.avi'
 
 
-def kth_action_recg_splits_df(kth_action_home, **kwargs):
+def kth_action_recg_splits_df(kth_action_home, clsname_map_path, **kwargs):
     fpath = os.path.join(kth_action_home, '00sequences.txt')
     splits = {}
     df = collections.defaultdict(list)
@@ -47,8 +47,8 @@ def kth_action_recg_splits_df(kth_action_home, **kwargs):
     return df
 
 
-def kth_action_video_nobbox(kth_action_home):
-    df = kth_action_recg_splits_df(kth_action_home)
+def kth_action_video_nobbox(kth_action_home, clsname_map_path, **kwargs):
+    df = kth_action_recg_splits_df(kth_action_home, clsname_map_path)
     for split in df[SPLIT_KEY].unique():
         df_split = df[df[SPLIT_KEY] == split]
         df_split.to_csv(KTH_SPLIT_CSV.format(split=split), index=False)

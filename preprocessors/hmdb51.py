@@ -9,7 +9,6 @@ The video is not included for training/testing if id is 0
 There should be 70 videos with id 1 , 30 videos with id 2 in each txt file.
 """
 import os
-
 import pandas as pd
 import glob
 
@@ -50,15 +49,15 @@ def hmdb51_splits_df(dataset_dir, **kwargs):
     return dfs
 
 
-def hmdb51_recognition(dataset_dir):
-    dfs = hmdb51_splits_df(dataset_dir)
+def hmdb51_recognition(dataset_dir,**kwargs):
+    dfs = hmdb51_splits_df(dataset_dir, **kwargs)
     for split in dfs[SPLIT_KEY].unique():
         df = dfs[dfs[SPLIT_KEY] == split]
         df.to_csv(HMDB51_RECG_TRAIN_SPLIT_CSV.format(split=split), index=False)
 
 
-def hmdb51_video_text(dataset_dir):
-    dfs = hmdb51_splits_df(dataset_dir)
+def hmdb51_video_text(dataset_dir, **kwargs):
+    dfs = hmdb51_splits_df(dataset_dir,  **kwargs)
     all_texts = set()
     for split in dfs[SPLIT_KEY].unique():
         df = dfs[dfs[SPLIT_KEY] == split]
@@ -69,6 +68,7 @@ def hmdb51_video_text(dataset_dir):
     with open(HMDB51_VIDTXT_ALL_TEXTS, 'w') as f:
         for t in sorted(all_texts):
             f.write(t + '\n')
+
 
 if __name__ == '__main__':
     dataset_dir = 'D:/video_datasets/hmdb51'

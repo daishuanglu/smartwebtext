@@ -68,15 +68,16 @@ def blended_cam(model,
 
 
 class VideoRecognitionEngine(ptl.LightningModule, ABC):
-    def __init__(self, config, video_key, target_key, num_classes, **kwargs):
+    def __init__(self, config, video_key, target_key, clsname_map, **kwargs):
         super().__init__()
         self.video_key = video_key
         self.target_key = target_key
-        self.num_classes = num_classes
+        self.num_classes = len(clsname_map)
         self.config = config
         self.image_processor = None
         self.model = None
         self.ce = nn.CrossEntropyLoss()
+        self.clsname_map = clsname_map
         self.bce = nn.BCEWithLogitsLoss()
         self.df_predictions = []
         self.epoch = 0
@@ -92,7 +93,7 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
 
     def training_step(self, batch, batch_nb):
         outputs = self.forward(batch, compute_loss=True)
-        loss_name = 'BCELoss' if self.config.get('mulitclass', '') else 'crossent'
+        loss_name = 'crossent' if self.config.get('mulitclass', '') else 'BCELoss'
         loss_fn = f'{loss_name}_map' if self.config.get('map_loss_factor', 0.0) > 0 else loss_name
         log = {f'{loss_fn}_loss': outputs['loss'].item()}
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
@@ -155,12 +156,12 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
 
 
 class VivitRecgModel(VideoRecognitionEngine):
-    def __init__(self, config, video_key, target_key, num_classes, **kwargs):
-        super().__init__(config, video_key, target_key, num_classes)
+    def __init__(self, config, video_key, target_key, clsname_map, **kwargs):
+        super().__init__(config, video_key, target_key, clsname_map)
         self.image_processor = VivitImageProcessor.from_pretrained(
             "google/vivit-b-16x2-kinetics400")
         self.model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
-        self.dense_pool_emb = nn.Linear(768, num_classes)
+        self.dense_pool_emb = nn.Linear(768, self.num_classes)
 
     def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
         inputs = self.image_processor(batch[self.video_key], return_tensors="pt")
@@ -195,12 +196,12 @@ class VivitRecgModel(VideoRecognitionEngine):
 
 
 class VitRecgModel(VideoRecognitionEngine):
-    def __init__(self, config, video_key, target_key, num_classes, **kwargs):
-        super().__init__(config, video_key, target_key, num_classes)
+    def __init__(self, config, video_key, target_key, clsname_map, **kwargs):
+        super().__init__(config, video_key, target_key, clsname_map)
         hf_pretrained_model_name = 'google/vit-base-patch16-224-in21k'
         self.image_processor = AutoImageProcessor.from_pretrained(hf_pretrained_model_name)
         self.model = ViTModel.from_pretrained(hf_pretrained_model_name)
-        self.dense_pool_emb = nn.Linear(768, num_classes)
+        self.dense_pool_emb = nn.Linear(768, self.num_classes)
 
     def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
         batch_videos = sum(batch[self.video_key], [])
@@ -234,13 +235,13 @@ class VitRecgModel(VideoRecognitionEngine):
 
 
 class SwinRecgModel(VideoRecognitionEngine):
-    def __init__(self, config, video_key, target_key, num_classes, **kwargs):
-        super().__init__(config, video_key, target_key, num_classes)
+    def __init__(self, config, video_key, target_key, clsname_map, **kwargs):
+        super().__init__(config, video_key, target_key, clsname_map)
         self.image_processor = AutoFeatureExtractor.from_pretrained(
             "microsoft/swin-base-patch4-window7-224")
         self.model = SwinModel.from_pretrained(
             "microsoft/swin-base-patch4-window7-224")
-        self.dense_pool_emb = nn.Linear(1024, num_classes)
+        self.dense_pool_emb = nn.Linear(1024, self.num_classes)
 
     def forward(self, batch: Dict[str, torch.Tensor], compute_loss=False):
         batch_videos = sum(batch[self.video_key], [])

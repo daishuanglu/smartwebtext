@@ -2,6 +2,7 @@ import os
 import glob
 import pandas as pd
 import numpy as np
+import json
 import h5py
 from tqdm import tqdm
 from utils import color_utils
@@ -67,7 +68,9 @@ def a2d_video_images(dataset_dir, label_colors_json, train_val_ratio=[0.95, 0.05
         df_split.to_csv(A2D_IMAGE_SPLIT_CSV.format(split=split), index=False)
 
 
-def a2d_recognition_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwargs):
+def a2d_mixed_recognition_splits_df(dataset_dir,
+                                    train_val_ratio=[0.95, 0.05],
+                                    **kwargs):
     df_meta = pd.read_csv(
         A2D_METADATA_PATH.format(root=dataset_dir), header=None,
         dtype=str, na_values=[], parse_dates=False, keep_default_na=False)
@@ -82,6 +85,9 @@ def a2d_recognition_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwarg
                 name, iid, valid, R, G, B = line.rstrip().split()
                 aa_id[int(iid)] = name
             found = found or all([kw in line for kw in ['NAME', 'ID', 'Valid', 'R', 'G', 'B']])
+    for i in range(80):
+        if i not in aa_id.keys():
+            aa_id[i] = ''
     df_meta[CLIP_PATH_KEY] = df_meta['vid'].apply(
         lambda x: A2D_CLIP_PATH.format(root=dataset_dir, vid=x))
     df_meta['anno_fids'] = df_meta['vid'].apply(lambda x: a2d_annotated_frame_ids(dataset_dir, x))
@@ -95,6 +101,45 @@ def a2d_recognition_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwarg
         lambda x: A2D_FID_SEP.join([aa_id[i] for i in x]))
     df_meta[CLASS_ID_KEY] = df_meta[CLASS_ID_KEY].apply(lambda x: A2D_FID_SEP.join([str(v) for v in x]))
     df_meta[SAMPLE_ID_KEY] = df_meta['vid']
+    df_meta['clsname_map'] = json.dumps(aa_id)
+    return df_meta
+
+
+def a2d_recognition_splits_df(dataset_dir,
+                              train_val_ratio=[0.95, 0.05],
+                              class_col='',
+                              **kwargs):
+    df_meta = pd.read_csv(
+        A2D_METADATA_PATH.format(root=dataset_dir), header=None,
+        dtype=str, na_values=[], parse_dates=False, keep_default_na=False)
+    df_meta.columns = A2D_METADATA_COLUMNS
+    df_meta[SPLIT_KEY] = df_meta['split_no'].apply(lambda x: np.random.choice(
+        ['train', 'val'], 1, p=train_val_ratio, replace=True)[0] if x == '0' else 'test')
+    with open(A2D_INFO_PATH.format(root=dataset_dir), 'r') as f:
+        found = False
+        aa_id = {}
+        for line in f.readlines():
+            if found:
+                name, iid, valid, R, G, B = line.rstrip().split()
+                aa_id[int(iid)] = name
+            found = found or all([kw in line for kw in ['NAME', 'ID', 'Valid', 'R', 'G', 'B']])
+    for i in range(80):
+        if i not in aa_id.keys():
+            aa_id[i] = ''
+    df_meta[CLIP_PATH_KEY] = df_meta['vid'].apply(
+        lambda x: A2D_CLIP_PATH.format(root=dataset_dir, vid=x))
+    df_meta['anno_fids'] = df_meta['vid'].apply(lambda x: a2d_annotated_frame_ids(dataset_dir, x))
+    df_meta[CLASS_ID_KEY] = df_meta['actor_action_label']
+    df_meta[CLASS_NAME] = df_meta[CLASS_ID_KEY].astype(int).map(aa_id)
+    df_meta[['actor', 'action']] =  df_meta[CLASS_NAME].str.split('-', n=2, expand=True)
+    df_meta[SAMPLE_ID_KEY] = df_meta['vid']
+    if class_col:
+        aa = df_meta[class_col].unique()
+        aa_dict = {value: idx for idx, value in enumerate(aa)}
+        df_meta[CLASS_ID_KEY] = df_meta[class_col].map(aa_dict)
+        df_meta[CLASS_NAME] = df_meta[class_col]
+    else:
+        df_meta['clsname_map'] = json.dumps(aa_id)
     return df_meta
 
 

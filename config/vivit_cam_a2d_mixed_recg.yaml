@@ -1,0 +1,29 @@
+model_name: 'vivit_cam_a2d_mixed_recg'
+encoder_type: "vivit"
+multiclass: True
+multiclass_sep: ";;;"
+skip_prep_data: False
+datasets:
+  a2d-action-actor-recg:
+    pipeline_fn: "a2d_mixed_recognition_splits_df"
+    dataset_dir: "D:/video_datasets"
+    train_val_ratio: [0.95, 0.05]
+    #dataset_dir: '/home/shud/video_datasets/UCF-101'
+val_prediction_fstr: 'val_predictions/vivit_cam_a2d_mixed_recg/{epoch:03d}.csv'
+val_clip_steps: 1000
+#Model
+cubelet_size: [16, 16, 2]
+skip_training: False
+clip_len: 32
+frame_sample_rate: 1
+map_loss_factor: 0.0
+#Settings
+learning_rate: 0.0001
+monitor: 'val_error_rate'
+epochs: 100
+batch_size: 1
+clear_cache: False
+limit:
+logger_dir: 'lightning_logs'
+resume_ckpt: False
+
