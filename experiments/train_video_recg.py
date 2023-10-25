@@ -23,21 +23,27 @@ def load_frames(feature_dict,
 
 
 def main():
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--config', required=True,
         help='model training configuration path.')
     args = parser.parse_args()
+    """
     # For local debugging
-    #class args:
-    #    config = "config/vivit_cam_hmdb51_recg.yaml"
+    class args:
+        config = "config/vivit_cam_a2d_recg.yaml"
     config = train_utils.read_config(args.config)
     if not config.get("skip_prep_data", False):
         pipelines.video_recognition(config['datasets'])
     train_vid_recg_features = {
         pipelines.CLIP_PATH_KEY: (lambda x: str(x)),
-        pipelines.CLASS_ID_KEY: (lambda x: int(x)),
-        pipelines.CLASS_NAME: (lambda x: str(x)),
+        pipelines.CLASS_ID_KEY: (
+            lambda x: [int(v) for v in x.split(config['multiclass_sep'])]
+            if config.get('multiclass_sep', '') else int(x)),
+        pipelines.CLASS_NAME: (
+            lambda x: [str(v) for v in x.split(config['multiclass_sep'])]
+            if config.get('multiclass_sep', '') else str(x)),
         pipelines.FRAME_ID_KEY: lambda x: [
             int(i) for i in str(x).strip().split(pipelines.FRAME_ID_SEP) if i],
         pipelines.SAMPLE_ID_KEY: (lambda x: str(x))

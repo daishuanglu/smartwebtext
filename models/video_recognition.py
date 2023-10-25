@@ -77,6 +77,7 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
         self.image_processor = None
         self.model = None
         self.ce = nn.CrossEntropyLoss()
+        self.bce = nn.BCEWithLogitsLoss()
         self.df_predictions = []
         self.epoch = 0
         self.val_cam = None
@@ -91,20 +92,28 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
 
     def training_step(self, batch, batch_nb):
         outputs = self.forward(batch, compute_loss=True)
-        loss_fn = 'crossent_map' if self.config.get('map_loss_factor', 0.0) > 0 else 'crossent'
+        loss_name = 'BCELoss' if self.config.get('mulitclass', '') else 'crossent'
+        loss_fn = f'{loss_name}_map' if self.config.get('map_loss_factor', 0.0) > 0 else loss_name
         log = {f'{loss_fn}_loss': outputs['loss'].item()}
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
         return {'loss': outputs['loss']}
 
     def validation_step(self, batch, batch_nb):
         outputs = self.forward(batch, compute_loss=True)
-        predictions = outputs['p'].argmax(dim=-1)
+        if self.config.get('multiclass', False):
+            predictions = [torch.nonzero(row > 0.5).squeeze().tolist() for row in outputs['p']]
+        else:
+            predictions = outputs['p'].argmax(dim=-1).cpu().detach().numpy()
         df_pred = {'target': batch[self.target_key],
-                   'predictions': predictions.cpu().detach().numpy(),
+                   'predictions': predictions,
                    pipelines.CLIP_PATH_KEY: batch[pipelines.CLIP_PATH_KEY],
                    pipelines.CLASS_NAME: batch[pipelines.CLASS_NAME]}
         df_pred = pd.DataFrame(df_pred)
-        df_pred['is_correct'] = df_pred['target'] == df_pred['predictions']
+        if self.config.get('multiclass', False):
+            df_pred['is_correct'] = df_pred.apply(
+                lambda x: all(p in x['target'] for p in x['predictions'])/len(x['target']), axis=1)
+        else:
+            df_pred['is_correct'] = df_pred['target'] == df_pred['predictions']
         self.df_predictions.append(df_pred)
         log = {'batch_error_rate': 1 - df_pred['is_correct'].mean()}
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
@@ -157,12 +166,23 @@ class VivitRecgModel(VideoRecognitionEngine):
         # batch_size * embed_size (768)
         pooled_seq = torch.mean(p_encoded_seq, dim=1)
         logits = self.dense_pool_emb(pooled_seq)
-        p = F.softmax(logits, dim=-1)
         cam = self.dense_pool_emb(p_encoded_seq)[:, 1:]
         loss = None
         if compute_loss:
-            targets = torch.tensor(batch[self.target_key]).to(train_utils.device)
-            loss = self.ce(logits, targets.long())
+            if self.config.get('multiclass', False):
+                nrows = len(batch[self.target_key])
+                targets = torch.zeros(nrows, self.num_classes)
+                inds = [[(r, c) for c in cols] for r, cols in enumerate(batch[self.target_key])]
+                inds = sum(inds, [])
+                rows, cols = zip(*inds)
+                targets[rows, cols] = 1.0
+                targets = targets.to(train_utils.device).float()
+                loss = self.bce(logits, targets)
+                p = torch.sigmoid(logits)
+            else:
+                targets = torch.tensor(batch[self.target_key]).to(train_utils.device)
+                loss = self.ce(logits, targets.long())
+                p = F.softmax(logits, dim=-1)
         return {'p': p.cpu().detach(),
                 'loss': loss,
                 'cam': cam.cpu().detach()}
