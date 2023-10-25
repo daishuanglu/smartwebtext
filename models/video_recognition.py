@@ -102,8 +102,10 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
         outputs = self.forward(batch, compute_loss=True)
         if self.config.get('multiclass', False):
             predictions = [torch.nonzero(row > 0.5).squeeze().tolist() for row in outputs['p']]
+            cam_ind = [p[0] for p in predictions]
         else:
             predictions = outputs['p'].argmax(dim=-1).cpu().detach().numpy()
+            cam_ind = predictions
         df_pred = {'target': batch[self.target_key],
                    'predictions': predictions,
                    pipelines.CLIP_PATH_KEY: batch[pipelines.CLIP_PATH_KEY],
@@ -111,7 +113,7 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
         df_pred = pd.DataFrame(df_pred)
         if self.config.get('multiclass', False):
             df_pred['is_correct'] = df_pred.apply(
-                lambda x: all(p in x['target'] for p in x['predictions'])/len(x['target']), axis=1)
+                lambda x: sum(p in x['target'] for p in x['predictions'])/len(x['target']), axis=1)
         else:
             df_pred['is_correct'] = df_pred['target'] == df_pred['predictions']
         self.df_predictions.append(df_pred)
@@ -121,7 +123,7 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
         if self.val_steps % self.config.get('val_clip_steps', 1000) == 0:
             sav_dir = os.path.join(self.val_pred_dir, 'iter_{:04d}'.format(self.val_steps))
             os.makedirs(sav_dir, exist_ok=True)
-            batch_cams = outputs['cam'][torch.arange(outputs['cam'].size(0)), :, predictions]
+            batch_cams = outputs['cam'][torch.arange(outputs['cam'].size(0)), :, cam_ind]
             clip_size = batch[self.video_key][0][0].shape[:2] \
                             + (len(batch[self.video_key][0]),)
             heatmaps = heats_cube(batch_cams,
