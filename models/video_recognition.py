@@ -112,8 +112,12 @@ class VideoRecognitionEngine(ptl.LightningModule, ABC):
                    pipelines.CLASS_NAME: batch[pipelines.CLASS_NAME]}
         df_pred = pd.DataFrame(df_pred)
         if self.config.get('multiclass', False):
-            df_pred['is_correct'] = df_pred.apply(
-                lambda x: sum(p in x['target'] for p in x['predictions'])/len(x['target']), axis=1)
+            df_pred['recall'] = df_pred.apply(
+                lambda x: sum(p in x['target']
+                              for p in x['predictions'])/len(x['target']), axis=1)
+            df_pred['precision'] = df_pred.apply(
+                lambda x: sum(p in x['target']
+                              for p in x['predictions']) / len(x['predictions']), axis=1)
         else:
             df_pred['is_correct'] = df_pred['target'] == df_pred['predictions']
         self.df_predictions.append(df_pred)
