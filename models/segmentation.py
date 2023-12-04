@@ -9,11 +9,10 @@ import os
 import itertools
 import random
 from utils.train_utils import device
-from utils import color_utils
-from utils import image_utils
+from utils import color_utils, image_utils, data_utils
 from modules.layers import *
 from modules.losses import *
-from modules import hungarian
+from modules import hungarian, pspnet
 from thin_plate_spline_motion_model.modules.util import *
 from thin_plate_spline_motion_model.modules import keypoint_detector, bg_motion_predictor
 
@@ -39,7 +38,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
                  learning_rate,
                  predictions_fstr=None,
                  predictions_fsep=None,
-                 label_colors_json=None):
+                 out_channels=64):
         super(SegmentationEngine, self).__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
@@ -49,17 +48,16 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         self.predictions_fstr = predictions_fstr
         self.sep = predictions_fsep if predictions_fsep else None
         self.check_annotations = False
-        if not label_colors_json:
-            label_colors = color_utils.generate_colors(self.config['out_channels'])
-            self.label_colors = torch.tensor(label_colors).to(device)
-        else:
-            label_colors = color_utils.load_color_codes(label_colors_json)
-            ids = [d['id'] for d in label_colors]
-            self.label_colors = torch.tensor([d['color'] for d in label_colors]).to(device)
-            self.color_index = -torch.ones(max(ids) + 1)
-            for i, d in enumerate(label_colors):
-                self.color_index[d['id']] = i
-            self.color_index = self.color_index.long().to(device)
+        label_colors = color_utils.generate_colors(out_channels)
+        self.label_colors = torch.tensor(label_colors).to(device)
+        #else:
+        #    label_colors = color_utils.load_color_codes(label_colors_json)
+        #    ids = [d['id'] for d in label_colors]
+        #    self.label_colors = torch.tensor([d['color'] for d in label_colors]).to(device)
+        #    self.color_index = -torch.ones(max(ids) + 1)
+        #    for i, d in enumerate(label_colors):
+        #        self.color_index[d['id']] = i
+        #    self.color_index = self.color_index.long().to(device)
         self.val_optimizer_idx = 1
         self.loss_names = None
 
@@ -70,9 +68,16 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         assert NotImplementedError(), 'Need to implement the network forward.'
 
     def training_step(self, batch, batch_nb):
-        loss_names = ['loss_%d' % i for i in range(
-            len(self.optimizers()))] if self.loss_names is None else self.loss_names
-        for i, (optimizer_i, loss_name) in enumerate(zip(self.optimizers(), loss_names)):
+        n_opt = len(self.optimizers()) if isinstance(self.optimizers(), list) else 1
+        if not self.loss_names:
+            loss_names = ['loss_%d' % i for i in range(n_opt)]
+        else:
+            loss_names = self.loss_names
+        if n_opt == 1:
+            _, _, loss = self.forward(batch, True, 0)
+            self.log(loss_names[0], loss.item(), prog_bar=True)
+            return loss
+        for i, (optimizer_i, loss_name) in enumerate(zip(opts, loss_names)):
             self.toggle_optimizer(optimizer_i, optimizer_idx=i)
             _, _, loss = self.forward(batch, True, i)
             self.log(loss_name, loss.item(), prog_bar=True)
@@ -103,10 +108,9 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             prediction_file_paths.append(self.predictions_fstr.format(**fvals))
         return prediction_file_paths
 
-    def validation_step(self, batch, batch_nb, optimizer_idx=1):
-        outputs, logits, loss = self(
+    def validation_step(self, batch, batch_nb):
+        outputs, _, loss = self(
             batch, compute_loss=True, optimizer_idx=self.val_optimizer_idx)
-        outputs = logits if self.check_annotations else outputs
         loss = loss.item()
         if self.predictions_fstr is not None:
             predictions_paths = self.get_prediction_path(batch)
@@ -121,10 +125,6 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         self.log_dict({'val_loss': loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
         return {'loss': loss}
 
-    def validation_epoch_end(self, *args, **kwargs):
-        self.train()
-        torch.cuda.empty_cache()
-
     def configure_optimizers(self):
         return [torch.optim.AdamW(params=self.parameters(), lr=self.lr)], []
 
@@ -133,6 +133,58 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         outputs, _ = self({'frames': [torch.from_numpy(img) for img in list_of_images]})
         segments = [(output*255).long().permute(1, 2, 0).detach().numpy() for output in outputs]
         return segments.astype('uint8')
+
+
+class Hourglass(SegmentationEngine):
+    def __init__(self, config, multi_fname_sep=None):
+        super(Hourglass, self).__init__(
+            batch_size=config['batch_size'],
+            learning_rate=config['learning_rate'],
+            predictions_fstr=config.get('val_prediction_fstr', None),
+            predictions_fsep=multi_fname_sep,
+            out_channels=config['out_channels']
+        )
+        self.check_annotations = True
+        self.config = config
+        self.build_network()
+        self.nll = torch.nn.NLLLoss()
+        self.bce = torch.nn.BCEWithLogitsLoss()
+        self.dice = MulticlassDiceLoss(num_classes=self.config['out_channels'])
+        self.val_optimizer_idx = 0
+        obj_label_colors = color_utils.generate_colors(self.config['out_channels'])
+        self.obj_label_colors = torch.tensor(obj_label_colors).to(device)
+        self.focal_dist_fn = lambda a, b: hungarian.compute_pairwise_focal_bce(
+            a, b, alpha=self.config['focal_alpha'], gamma=self.config['focal_gamma'])
+
+    def build_network(self):
+        self.gen = pspnet.build_network(self.config.get('pspnet', 'resnet34'),
+                                        n_classes=self.config['out_channels'])
+
+    def configure_optimizers(self):
+        b1, b2 = 0.5, 0.999
+        opt = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
+        self.loss_names = ['label_plus_obj_loss']
+        return [opt], []
+
+    def forward(self, batch, compute_loss=False, optimizer_idx=0):
+        x = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
+        n_frames = len(x)
+        x_patches, x_coords = image_utils.image_tensors_to_patches(x, self.config['patch_size'])
+        x_patches = x_patches.to(device).float()
+        y_logits = self.gen(x_patches, compute_loss)
+        y_logits = image_utils.patches_to_image_tensors(y_logits, x_coords)
+        loss = None
+        if compute_loss:
+            batch_gt = data_utils.collate_dict(batch['gt_frames']) 
+            gt_label_masks =  flatten_list(batch_gt['label_mask'])
+            gt_obj_masks = flatten_list(batch_gt['obj_mask'])
+            loss = 0.0
+            for i in range(n_frames):
+                loss += self.nll(y_logits[i].unsqueeze(0), gt_label_masks[i].unsqueeze(0))
+                #loss += self.dice(y_logits[i][1:].sum(0), gt_obj_masks[i][1])
+                #loss += self.bce(y_logits[i][0], gt_obj_masks[i][0])
+            loss /= n_frames
+        return [torch.softmax(y, dim=-1) for y in y_logits], y_logits, loss
 
 
 class Pix2Pix(SegmentationEngine):
@@ -184,7 +236,7 @@ class Pix2Pix(SegmentationEngine):
         b1, b2 = 0.5, 0.999
         opt_g = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
         opt_d = torch.optim.Adam(self.disc.parameters(), lr=self.lr, betas=(b1, b2))
-        opt_a = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
+        #opt_a = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
         opt_o = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
         # Use the below lines if trying with annotation loss
         self.loss_names = ['d_loss', 'g_loss', 'iou_loss']

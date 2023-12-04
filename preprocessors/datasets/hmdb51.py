@@ -22,6 +22,7 @@ HMDB51_SPLIT_MAP = {'1': 'train', '0': 'val', '2': 'test'}
 HMDB51_RECG_TRAIN_SPLIT_CSV = 'data_model/recg_hmdb51_{split}.csv'
 HMDB51_VIDTXT_TRAIN_SPLIT_CSV = 'data_model/vidtxt_hmdb51_{split}.csv'
 HMDB51_VIDTXT_ALL_TEXTS = 'data_model/vidtxt_hmdb51_all_texts.txt'
+INVALID_HMDB51_RECG_VIDS = []
 
 
 def hmdb51_splits_df(dataset_dir, **kwargs):
@@ -38,6 +39,7 @@ def hmdb51_splits_df(dataset_dir, **kwargs):
             df_split = pd.read_csv(fsplit, sep=' ', dtype=str, header=None, names=['vid', 'split_no', 'empty'])
             df_split[SPLIT_KEY] = df_split['split_no'].map(HMDB51_SPLIT_MAP)
             df_split[CLASS_NAME] = a
+            df_split = df_split[~df_split['vid'].isin(INVALID_HMDB51_RECG_VIDS)]
             df_split[CLASS_ID_KEY] = actions.index(a)
             df_split[SAMPLE_ID_KEY] = df_split['vid'].apply(lambda x: x.split('.')[0])
             df_split[CLIP_PATH_KEY] = df_split['vid'].apply(

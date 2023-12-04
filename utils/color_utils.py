@@ -1,7 +1,7 @@
 import math
 import json
 from collections import namedtuple
-from typing import List
+from typing import List, Dict
 import matplotlib.colors as mcolors
 from matplotlib.lines import Line2D
 
@@ -95,6 +95,47 @@ MSCOCO_OBJ_NAMES ={
   78: 'hair drier',
   79: 'toothbrush'
 }
+
+
+def uniq_color_code_map(color_codes: List[List[Dict]]):
+    uniq_color_code = []
+    uniq_color_names = []
+    uniq_ids = []
+    segment_ids = []
+    i = 0
+    for seg_id, color_code in enumerate(color_codes):
+        for code in color_code:
+            name = code['name'].lower()
+            if name in uniq_color_names:
+                uniq_ids.append(uniq_color_names.index(name))
+            else:
+                uniq_color_code.append(code)
+                uniq_color_names.append(name)
+                uniq_ids.append(i)
+                segment_ids.append(seg_id)
+                i += 1
+    return uniq_color_code, uniq_ids, segment_ids
+
+
+def uniq_color_id_coder(color_codes: List[List[Dict]]):
+    uniq_color_names = []
+    uniq_ids = []
+    segment_ids = []
+    uniq_coder = {}
+    i = 0
+    for seg_id, color_code in enumerate(color_codes):
+        for code in color_code:
+            name = code['name'].lower()
+            if name in uniq_color_names:
+                uniq_coder[code['id']] = uniq_color_names.index(name)
+                uniq_ids.append(uniq_color_names.index(name))
+            else:
+                uniq_coder[code['id']] = code['id']
+                uniq_color_names.append(name)
+                uniq_ids.append(i)
+                segment_ids.append(seg_id)
+                i += 1
+    return uniq_coder, uniq_ids, segment_ids
 
 
 def save_color_codes(color_codes: List[ColorCode], fpath: str):

@@ -25,7 +25,7 @@ class MulticlassDiceLoss(nn.Module):
         targets_one_hot = targets_one_hot.permute(0, 3, 1, 2)
         # Multiply one-hot encoded ground truth labels with the probabilities to get the
         # prredicted probability for the actual class.
-        intersection = (targets_one_hot * probabilities).sum()
+        intersection = targets_one_hot * probabilities
         mod_a = intersection.sum()
         mod_b = targets.numel()
         dice_coefficient = 2. * intersection / (mod_a + mod_b + smooth)
