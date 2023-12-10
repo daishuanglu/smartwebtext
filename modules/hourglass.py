@@ -1,12 +1,12 @@
 '''
 Hourglass network inserted in the pre-activated Resnet
 Use lr=0.01 for current version
-(c) YANG, Wei
 '''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.hub import load_state_dict_from_url
+
 
 
 model_urls = {
@@ -100,11 +100,18 @@ class Hourglass(nn.Module):
 
 class HourglassNet(nn.Module):
     '''Hourglass model from Newell et al ECCV 2016'''
-    def __init__(self, block, num_stacks=2, num_blocks=4, num_classes=16):
+    def __init__(self, 
+                 block,
+                 num_stacks=2,
+                 num_blocks=4,
+                 num_classes=16,
+                 inplanes=128, 
+                 num_feats=256,
+                 **kwargs):
         super(HourglassNet, self).__init__()
 
-        self.inplanes = 64
-        self.num_feats = 128
+        self.inplanes = inplanes
+        self.num_feats = num_feats
         self.num_stacks = num_stacks
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
                                bias=True)
@@ -116,6 +123,7 @@ class HourglassNet(nn.Module):
         self.maxpool = nn.MaxPool2d(2, stride=2)
 
         # build hourglass modules
+        self.block_expansion = block.expansion
         ch = self.num_feats*block.expansion
         hg, res, fc, score, fc_, score_ = [], [], [], [], [], []
         for i in range(num_stacks):
@@ -132,6 +140,14 @@ class HourglassNet(nn.Module):
         self.score = nn.ModuleList(score)
         self.fc_ = nn.ModuleList(fc_)
         self.score_ = nn.ModuleList(score_)
+        self.up1 = nn.ConvTranspose2d(
+            ch, ch, kernel_size=4, stride=2, padding=1, bias=False)
+        self.up2 = nn.ConvTranspose2d(
+            ch, ch // block.expansion, kernel_size=4, stride=2, padding=1, bias=False)
+        self.up3 = nn.ConvTranspose2d(
+            ch // block.expansion, ch // (block.expansion * 2), 
+            kernel_size=4, stride=2, padding=1, bias=False)
+        self.final_score = nn.Conv2d(inplanes, num_classes, kernel_size=1, bias=True)
 
     def _make_residual(self, block, planes, blocks, stride=1):
         downsample = None
@@ -159,28 +175,30 @@ class HourglassNet(nn.Module):
             )
 
     def forward(self, x):
-        out = []
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-
-        x = self.layer1(x)
-        x = self.maxpool(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
+        #out = []
+        xc = self.conv1(x)
+        xc = self.bn1(xc)
+        xc = self.relu(xc)
+        #print('conv1 weights', self.conv1.weight[0, :3, :3, 0])
+        x1 = self.layer1(xc)
+        x1 = self.maxpool(x1)
+        x2 = self.layer2(x1)
+        x3 = self.layer3(x2)
 
         for i in range(self.num_stacks):
-            y = self.hg[i](x)
+            y = self.hg[i](x3)
             y = self.res[i](y)
             y = self.fc[i](y)
             score = self.score[i](y)
-            out.append(score)
+            #out.append(score)
             if i < self.num_stacks-1:
                 fc_ = self.fc_[i](y)
                 score_ = self.score_[i](score)
-                x = x + fc_ + score_
-
-        return out
+                x3 += fc_ + score_
+        y1 = self.up1(y) + F.interpolate(x2, scale_factor=self.block_expansion)
+        y2 = self.up2(y1) + F.interpolate(x1, scale_factor=self.block_expansion * 2)
+        y3 = self.up3(y2) + F.interpolate(xc, scale_factor=self.block_expansion * 2)
+        return self.final_score(y3)
 
 
 def hg(**kwargs):
@@ -211,3 +229,15 @@ def hg2(pretrained=False, progress=True, num_blocks=1, num_classes=16):
 def hg8(pretrained=False, progress=True, num_blocks=1, num_classes=16):
     return _hg('hg8', pretrained, progress, num_stacks=8, num_blocks=num_blocks,
                num_classes=num_classes)
+
+
+if __name__ == '__main__':
+    x = torch.rand(3, 3, 256,256)
+    net = HourglassNet(Bottleneck,
+                 num_stacks=2,
+                 num_blocks=4,
+                 num_classes=16,
+                 inplanes=128, 
+                 num_feats=256)
+    y = net(x)
+    print(y.shape)

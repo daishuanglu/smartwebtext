@@ -39,21 +39,29 @@ class PSPUpsample(nn.Module):
         p = F.interpolate(input=x, size=(h, w), mode='bilinear')
         return self.conv(p)
 
+resize_preprocess = transforms.Compose([
+    transforms.Resize((256, 256), antialias=True)
+])
 
 resnet_preprocess = transforms.Compose([
-    #transforms.Resize(256),
+    transforms.Resize((256, 256), antialias=True),
     #transforms.CenterCrop(224),
     #transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
-
+yolo_preprocess = transforms.Compose([
+    transforms.Resize((256, 256)),
+    #transforms.CenterCrop(224),
+    #transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
 
 class PSPNet(nn.Module):
     def __init__(self, 
                  n_classes=18, 
                  sizes=(1, 2, 3, 6), 
                  psp_size=2048, 
-                 deep_features_size=1024, 
+                 deep_features_size=1024,
                  backend='resnet34',
                  pretrained=True):
         super().__init__()
@@ -72,11 +80,11 @@ class PSPNet(nn.Module):
 
         self.drop_2 = nn.Dropout2d(p=0.15)
         self.final = nn.Sequential(
-            nn.Conv2d(64, n_classes, kernel_size=1),
-            nn.LogSoftmax(dim=1)
+            nn.Conv2d(64, n_classes, kernel_size=1)
+            #nn.LogSoftmax(dim=1)
         )
 
-    def forward(self, x, compute_loss=False):
+    def forward(self, x):
         x = resnet_preprocess(x)
         #f, class_f = self.feats(x) 
         f = self.feats(x) 
@@ -101,25 +109,25 @@ class PSPNet(nn.Module):
 
 
 _models = {
-    'squeezenet': lambda n: PSPNet(
-        sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='squeezenet', n_classes=n),
-    'densenet': lambda n: PSPNet(
-        sizes=(1, 2, 3, 6), psp_size=1024, deep_features_size=512, backend='densenet', n_classes=n),
-    'resnet18': lambda n: PSPNet(
-        sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet18', n_classes=n),
-    'resnet34': lambda n: PSPNet(
-        sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet34', n_classes=n),
-    'resnet50': lambda n: PSPNet(
-        sizes=(1, 2, 3, 6), psp_size=2048, deep_features_size=1024, backend='resnet50', n_classes=n),
-    'resnet101': lambda n: PSPNet(
-        sizes=(1, 2, 3, 6), psp_size=2048, deep_features_size=1024, backend='resnet101'),
-    'resnet152': lambda n: PSPNet(
-        sizes=(1, 2, 3, 6), psp_size=2048, deep_features_size=1024, backend='resnet152', n_classes=n)
+    'squeezenet': lambda n, pre: PSPNet(
+        sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='squeezenet', n_classes=n, pretrained=pre),
+    'densenet': lambda n, pre: PSPNet(
+        sizes=(1, 2, 3, 6), psp_size=1024, deep_features_size=512, backend='densenet', n_classes=n, pretrained=pre),
+    'resnet18': lambda n, pre: PSPNet(
+        sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet18', n_classes=n, pretrained=pre),
+    'resnet34': lambda n, pre: PSPNet(
+        sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet34', n_classes=n, pretrained=pre),
+    'resnet50': lambda n, pre: PSPNet(
+        sizes=(1, 2, 3, 6), psp_size=2048, deep_features_size=1024, backend='resnet50', n_classes=n, pretrained=pre),
+    'resnet101': lambda n, pre: PSPNet(
+        sizes=(1, 2, 3, 6), psp_size=2048, deep_features_size=1024, backend='resnet101', n_classes=n, pretrained=pre),
+    'resnet152': lambda n, pre: PSPNet(
+        sizes=(1, 2, 3, 6), psp_size=2048, deep_features_size=1024, backend='resnet152', n_classes=n, pretrained=pre)
 }
 
 
-def build_network(backend, n_classes):
+def build_network(backend, n_classes, pretrained, **kwargs):
     backend = backend.lower()
-    net = _models[backend](n_classes)
+    net = _models[backend](n_classes, pretrained)
     #net = nn.DataParallel(net)
     return net

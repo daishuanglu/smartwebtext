@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 
 
 class DiscCNNBlock(nn.Module):
@@ -148,7 +147,6 @@ class GlobalHiddenUpdater(nn.Module):
         super().__init__()
         self.hidden_dim = g_dim
         padding = (kernel_size - 1) // 2
-        #self.transform = GConv2D(mid_dim+hidden_dim, hidden_dim*3, kernel_size=3, padding=1)
         self.transform = nn.Conv2d(g_dim*2, g_dim*3,
                                    kernel_size=kernel_size, padding = padding, stride = 1)
         nn.init.xavier_normal_(self.transform.weight)

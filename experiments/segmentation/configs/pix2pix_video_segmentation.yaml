@@ -2,16 +2,32 @@ model_name: 'pix2pix_video_segmentor'
 train_val_ratio: [0.95, 0.05]
 skip_prep_data: False
 val_prediction_fstr: 'val_predictions/video_seg/{id}/{annotated_fids}.jpg'
-#Model
 datasets:
   a2d-video-segmentation:
     pipeline_fn: "a2d_splits_df"
     train_val_ratio: [0.95, 0.05]
-    dataset_dir: 'D:/video_datasets'
+    dataset_dir: '/home/shud/video_datasets'
 
 max_num_objects: 80
 skip_training: False
 input_size: [320, 768]
+pspnet:
+  backend: "resnet50"
+  n_classes: 80
+  pretrained: True
+generator:
+  in_channels: 3
+  features: 64
+  n_layers: 6
+  out_channels: 80
+# hourglass settings
+hourglass:
+  num_blocks: 3
+  num_stacks: 1
+  num_classes: 80
+  inplanes: 128
+  num_feats: 256
+
 # pix2pix settings
 patch_size: 256
 gen_features: 64
@@ -28,20 +44,20 @@ kp_variance: 0.01
 bg_label_index: 0
 use_focal_loss: True
 use_dice_loss: False
-# focal loss params, ref suggests when incresing gamma, alpha should be reduced.
-focal_alpha: 0.5
-focal_gamma: 2.0
-#out_channels: 64 #total 64 action-actor classes in A2D dataset
+focal_loss:
+  alpha: 0.5
+  gamma: 2.0
 features: [64, 128, 256, 512]
 bilinear: True
-#Settings
-learning_rate: 0.0001
+
+optimizer:
+  lr: 1.0e-3
+  weight_decay: 1.0e-6
 monitor: 'val_loss'
 epochs: 100
 batch_size: 1
 clear_cache: False
 limit:
 logger_dir: 'lightning_logs'
-resume_ckpt: True
-pspnet: 'resnet50'
+resume_ckpt: False
 

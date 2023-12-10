@@ -33,7 +33,6 @@ p_tqdm
 h5py
 opencv-python
 pycocotools
-matplotlib
 hungarian-loss
 pytube
 tabulate

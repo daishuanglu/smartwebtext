@@ -8,8 +8,7 @@ from PIL import Image as PilImage
 import pims
 
 from preprocessors import pipelines
-from utils import train_utils
-from utils import data_utils
+from utils import train_utils, data_utils
 from models import segmentation
 
 
@@ -42,7 +41,8 @@ def load_frame_annotation(feature_dict):
 
 
 def main():
-    config = train_utils.read_config("config/pix2pix_video_segmentation.yaml")
+    config = train_utils.read_config(
+        "experiments/segmentation/configs/pix2pix_video_segmentation.yaml")
     if not config.get("skip_prep_data", False):
         pipelines.mixed_video_segmentation(config['datasets'])
 
@@ -62,7 +62,7 @@ def main():
     }
     logger_dir = config.get("logger_dir", train_utils.DEFAULT_LOGGER_DIR)
     os.makedirs(logger_dir, exist_ok=True)
-    model_obj = segmentation.Hourglass(
+    model_obj = segmentation.BaseSegmentor(
         config, multi_fname_sep=pipelines.FRAME_ID_SEP).to(train_utils.device)
     print("model initialized. ")
     latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name']) \

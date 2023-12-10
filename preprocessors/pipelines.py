@@ -90,6 +90,7 @@ VID_SEG_COLS = [SAMPLE_ID_KEY,
                 LABEL_MASK_KEY,
                 ANNOTATION_PROCESSOR]
 VID_SEG_DATASET_SEP = '\t'
+UNIQUE_COLOR_ID_MAP_PATH = 'data_model/video_seg_unique_color_id_map.json'
 
 
 def mixed_video_segmentation(dataset_configs):
@@ -106,10 +107,13 @@ def mixed_video_segmentation(dataset_configs):
             f'Video segmentation dataset {ds_name} error: Missing color code.'
         df_color_code = df[[DATASET_KEY, COLOR_CODE]]
         df_color_code = df_color_code.set_index(DATASET_KEY)[COLOR_CODE]
-        uniq_color_codes = [json.loads(color_code) 
-                            for color_code in df_color_code.unique().tolist()]
+        uniq_color_codes = []
+        for color_code_path in df_color_code.unique().tolist():
+            with open(color_code_path, 'r') as f:
+                uniq_color_codes.append(json.load(f))
         uniq_color_id_map, _, _ = color_utils.uniq_color_id_coder(uniq_color_codes)
-        df[UNIQUE_CLASS_ID_MAP] = json.dumps(uniq_color_id_map)
+        with open(UNIQUE_COLOR_ID_MAP_PATH, 'w') as f:
+            json.dump(uniq_color_id_map, f)
         dfs.append(df)
     dfs = pd.concat(dfs)
     for split in dfs[SPLIT_KEY].unique():

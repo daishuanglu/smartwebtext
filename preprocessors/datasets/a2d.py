@@ -14,22 +14,24 @@ A2D_METADATA_PATH = '{root}/A2D_main_1_0/Release/videoset.csv'
 A2D_CLIP_PATH = '{root}/A2D_main_1_0/Release/clips320H/{vid}.mp4'
 A2D_SAM_OUTPUT_CLIP_PATH = '{root}/A2D_main_1_0/Release/clips320H_sam/{vid}.mp4'
 #A2D_ANNOTATION_PATH = '{root}/A2D_main_1_0/Release/Annotations/mat/{vid}/{fid}.mat'
-A2D_ANNOTATION_PATH = '{root}/a2d_annotation_with_instances/{vid}/{fid}.h5'
+A2D_ANNOTATION_PATH = '{root}/a2d_inst/a2d_annotation_with_instances/{vid}/{fid}.h5'
 A2D_ANNO_COLOR_IMG_PATH ='{root}/A2D_main_1_0/Release/Annotations/col/{vid}/{fid}.png'
 A2D_IMAGE_SPLIT_CSV = 'data_model/A2D_video_image_{split}.csv'
 A2D_INFO_PATH = '{root}/A2D_main_1_0/Release/README'
 A2D_RECG_TRAIN_SPLIT_CSV = 'data_model/A2D_video_recognition_{split}.csv'
-A2D_REF_TEXT_PATH = '{root}/A2D_main_1_0/a2d_annotation.txt'
+A2D_REF_TEXT_PATH = '{root}/a2d_annotation.txt'
 A2D_OBJECT_MASK_KEY = 'reMask'
 A2D_LABEL_MASK_KEY = 'reS_id' 
 A2D_REF_TEXT_KEY = 'instance'
 A2D_PROCESSOR = 'a2d_context'
+A2D_COLOR_CODE_PATH = '{root}/a2d_color_code.json'
+A2D_CLASS_ID_NAME_MAP_PATH = '{root}/a2d_class_id_name.json'
 
 
 def root_from_annotation_path(fpath):
     assert 'a2d_annotation_with_instances' in fpath, \
         f'Extract vid from annotation path error: {fpath} is not an A2D annotation path.'
-    return fpath.split('/a2d_annotation_with_instances/')[0]
+    return fpath.split('/a2d_inst/a2d_annotation_with_instances/')[0]
 
 
 def vid_from_annotation_path(fpath):
@@ -48,7 +50,10 @@ def get_ref_text(root, vid, obj_id, df=None):
     if df is None:
         df = load_ref_text_df(root=root)
     text = df[(df['instance_id'] == obj_id) & (df['video_id'] == vid)]['query']
-    return text.iloc[0]
+    if len(text) > 0:
+        return text.iloc[0]
+    else:
+        return ''
 
 
 def a2d_annotated_frame_ids(root, vid):
@@ -83,18 +88,25 @@ def a2d_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwargs):
                                      'B': int(B)})
                 aa_id[int(iid)] = name
             found = found or all([kw in line for kw in ['NAME', 'ID', 'Valid','R','G','B']])
-        print(label_colors)
+        #print(label_colors)
+    col_code_path = A2D_COLOR_CODE_PATH.format(root=dataset_dir)
+    cls_id_path = A2D_CLASS_ID_NAME_MAP_PATH.format(root=dataset_dir)
+    with open(col_code_path, 'w') as f:
+        json.dump(label_colors, f)
+    with open(cls_id_path, 'w') as f:
+        json.dump(aa_id, f)
     df_meta[CLIP_PATH_KEY] = df_meta['vid'].apply(
         lambda x: A2D_CLIP_PATH.format(root=dataset_dir, vid=x))
     df_meta[[ANNOTATED_FRAME_ID, ANNOTATED_FRAME_PATH]] = df_meta['vid'].apply(
         lambda x: a2d_annotated_frame_ids(dataset_dir, x)).apply(pd.Series)
+    df_meta = df_meta[df_meta[ANNOTATED_FRAME_ID] != '']
+    df_meta = df_meta[~df_meta[ANNOTATED_FRAME_ID].isna()]
     df_meta[CLASS_ID_KEY] = df_meta['actor_action_label']
     df_meta[CLASS_NAME] = df_meta[CLASS_ID_KEY].astype(int).map(aa_id)
     df_meta[['actor', 'action']] =  df_meta[CLASS_NAME].str.split('-', n=2, expand=True)
     df_meta[SAMPLE_ID_KEY] = df_meta['vid']
-    df_meta[CLASS_ID_NAME_MAP] = json.dumps(aa_id)
-    df_meta[COLOR_CODE] = json.dumps(label_colors)
-    df_meta[COLOR_CODE] = json.dumps(label_colors)
+    df_meta[CLASS_ID_NAME_MAP] = cls_id_path
+    df_meta[COLOR_CODE] = col_code_path
     df_meta[OBJECT_MASK_KEY] = A2D_OBJECT_MASK_KEY
     df_meta[LABEL_MASK_KEY] = A2D_LABEL_MASK_KEY
     df_meta[REF_TEXT_KEY] = A2D_REF_TEXT_KEY

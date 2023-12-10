@@ -140,9 +140,9 @@ def zip(url, dataset_dir, type='zip', output_fname=None):
         sav_dir = os.path.join(dataset_dir, filename.split('.')[0])
     else:
         sav_dir = os.path.join(dataset_dir, output_fname.split('.')[0])
-    #os.makedirs(sav_dir, exist_ok=True)
-    print('Unzipping to ', dataset_dir)
-    unzip_file(filename, dataset_dir, type)
+    print('Unzipping to ',  sav_dir)
+    os.makedirs(sav_dir, exist_ok=True)
+    unzip_file(filename, sav_dir, type)
     print('Remove cached zipfile', filename)
     os.remove(filename)
     return sav_dir

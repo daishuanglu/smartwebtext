@@ -1,36 +1,57 @@
 import torch
 import torch.nn as nn
-from modules import ops
 
 
-class MulticlassDiceLoss(nn.Module):
-    """Reference: https://www.kaggle.com/code/bigironsphere/loss-function-library-keras-pytorch#Dice-Loss
+class DiceLoss(nn.Module):
+    r"""Criterion that computes Sørensen-Dice Coefficient loss.
+
+    According to [1], we compute the Sørensen-Dice Coefficient as follows:
+
+    .. math::
+
+        \text{Dice}(x, class) = \frac{2 |X| \cap |Y|}{|X| + |Y|}
+
+    where:
+       - :math:`X` expects to be the scores of each class.
+       - :math:`Y` expects to be the one-hot tensor with the class labels.
+
+    the loss, is finally computed as:
+
+    .. math::
+
+        \text{loss}(x, class) = 1 - \text{Dice}(x, class)
+
+    [1] https://en.wikipedia.org/wiki/S%C3%B8rensen%E2%80%93Dice_coefficient
+
+    Shape:
+        - Input: :math:`(N, C, H, W)` where C = number of classes.
+        - Target: :math:`(N, H, W)` where each value is
+          :math:`0 ≤ targets[i] ≤ C−1`.
+
+    Examples:
+        >>> N = 5  # num_classes
+        >>> loss = tgm.losses.DiceLoss()
+        >>> input = torch.randn(1, N, 3, 5, requires_grad=True)
+        >>> target = torch.empty(1, 3, 5, dtype=torch.long).random_(N)
+        >>> output = loss(input, target)
+        >>> output.backward()
     """
 
-    def __init__(self, num_classes):
-        super().__init__()
-        self.num_classes = num_classes
+    def __init__(self) -> None:
+        super(DiceLoss, self).__init__()
+        self.eps: float = 1e-6
 
-    def forward(self, logits, targets, dim=-1, smooth=1e-6):
-        """
-        The "reduction" argument is ignored. This method computes the dice
-        loss for all classes and provides an overall weighted loss.
-        """
-        probabilities = logits
-        if dim is not None:
-            probabilities = nn.Softmax(dim=dim)(logits)
-        # end if
-        targets_one_hot = torch.nn.functional.one_hot(targets, num_classes=self.num_classes)
-        # Convert from NHWC to NCHW
-        targets_one_hot = targets_one_hot.permute(0, 3, 1, 2)
-        # Multiply one-hot encoded ground truth labels with the probabilities to get the
-        # prredicted probability for the actual class.
-        intersection = targets_one_hot * probabilities
-        mod_a = intersection.sum()
-        mod_b = targets.numel()
-        dice_coefficient = 2. * intersection / (mod_a + mod_b + smooth)
-        dice_loss = -dice_coefficient.log()
-        return dice_loss
+    def forward(
+            self,
+            input_soft: torch.Tensor,
+            target_one_hot: torch.Tensor) -> torch.Tensor:
+        # compute the actual dice score
+        dims = (1, 2, 3)
+        intersection = torch.sum(input_soft * target_one_hot, dims)
+        cardinality = torch.sum(input_soft + target_one_hot, dims)
+
+        dice_score = 2. * intersection / (cardinality + self.eps)
+        return torch.mean(1. - dice_score)
 
 
 def focal_loss(outputs, targets, alpha=1.0, gamma=2.0):
@@ -48,21 +69,50 @@ def focal_loss(outputs, targets, alpha=1.0, gamma=2.0):
     return focal_loss
 
 
-class EMA():
-    def __init__(self, alpha):
-       super().__init__()
-       self.alpha = alpha
+def focal_loss_stable(y_real, y_pred, eps = 1e-8, gamma = 0):
+    probabilities = torch.clamp(torch.sigmoid(y_pred), min=eps, max=1-eps)
+    return (1 - probabilities)**gamma * (
+        y_pred - y_real * y_pred + torch.log(1 + torch.exp(-y_pred)))
 
-    def update_average(self, old, new):
-       if old is None:
-           return new
-       return old * self.alpha + (1 - self.alpha) * new
 
-    def flow(self, student_model, teacher_model):
-        for student_params, teacher_params in zip(student_model.parameters(), teacher_model.parameters()):
-            old_weight, up_weight = teacher_params.data, student_params.data
-            teacher_params.data = self.update_average(old_weight, up_weight)
-        return teacher_model
+##
+# version 1: use torch.autograd
+class FocalLossV1(nn.Module):
+
+    def __init__(self,
+                 alpha=0.25,
+                 gamma=2,
+                 reduction='mean'):
+        super(FocalLossV1, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+        self.crit = nn.BCEWithLogitsLoss(reduction='none')
+
+    def forward(self, logits, label):
+        '''
+        Usage is same as nn.BCEWithLogits:
+            >>> criteria = FocalLossV1()
+            >>> logits = torch.randn(8, 19, 384, 384)
+            >>> lbs = torch.randint(0, 2, (8, 19, 384, 384)).float()
+            >>> loss = criteria(logits, lbs)
+        '''
+        probs = torch.sigmoid(logits)
+        coeff = torch.abs(label - probs).pow(self.gamma).neg()
+        log_probs = torch.where(logits >= 0,
+                torch.nn.functional.softplus(logits, -1, 50),
+                logits - torch.nn.functional.softplus(logits, 1, 50))
+        log_1_probs = torch.where(logits >= 0,
+                -logits + torch.nn.functional.softplus(logits, -1, 50),
+                -torch.nn.functional.softplus(logits, 1, 50))
+        loss = label * self.alpha * log_probs + (1. - label) * (1. - self.alpha) * log_1_probs
+        loss = loss * coeff
+
+        if self.reduction == 'mean':
+            loss = loss.mean()
+        if self.reduction == 'sum':
+            loss = loss.sum()
+        return loss
 
 
 if __name__=='__main__':
