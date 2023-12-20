@@ -1,5 +1,57 @@
 import cv2
 import numpy as np
+from itertools import cycle
+
+
+PLOT_COLORS = [
+    (0, 0, 255),    # Blue
+    (0, 165, 255),  # Orange
+    (0, 255, 0),    # Green
+    (0, 0, 255),    # Red
+    (128, 0, 128),  # Purple
+    (165, 42, 42),  # Brown
+    (255, 192, 203), # Pink
+    (128, 128, 128),# Grey
+    (128, 128, 0),  # Olive
+    (0, 255, 255),  # Cyan
+    (255, 255, 255), # White
+    (0, 255, 0),    # Lime
+    (255, 0, 255),  # Magenta
+    (152, 251, 152), # Pale Green
+    (255, 255, 0),  # Yellow
+    (255, 215, 0),  # Gold
+    (218, 165, 32),  # Goldenrod
+    (255, 140, 0),  # Dark Orange
+    (205, 133, 63),  # Peru
+    (250, 128, 114)  # Salmon
+]
+
+def colorize_labels(label_map, label_colors=[]):
+    
+    if not label_colors:
+        label_colors = PLOT_COLORS
+
+    def _color_map(label):
+        return label_colors[label % len(label_colors)]
+
+    vectorized_mapping = np.vectorize(_color_map)
+    mapped_array = vectorized_mapping(label_map)
+    return np.stack(mapped_array, -1)
+
+
+def draw_contours(masks, image=None, colors=[]):
+    if image is None:
+        height, width = masks[0].shape
+        image = np.zeros((height, width, 3), dtype=np.uint8)
+    result_image = image.copy()
+    colors = cycle(PLOT_COLORS) if not colors else cycle(colors)
+    for mask in masks:
+        if mask.sum() > 0:
+            color = next(colors)
+            contours, _ = cv2.findContours(
+                (mask * 255).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            result_image = cv2.drawContours(result_image, contours, -1, color, 2)
+    return result_image
 
 # Create a 10x10 image with a specified character in the center
 def create_char_image(char):
@@ -7,7 +59,9 @@ def create_char_image(char):
     size, _ = cv2.getTextSize(char, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
     x_offset = (16 - size[0]) // 2
     y_offset = (16 + size[1]) // 2
-    cv2.putText(image, char, (x_offset-2, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1, cv2.LINE_AA)
+    cv2.putText(
+        image, char, (x_offset-2, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1,
+        cv2.LINE_AA)
     return image
 
 
@@ -50,7 +104,8 @@ def vconcat_images_max_width(images):
         padding = max_width - image.shape[1]
         left_padding = padding // 2
         right_padding = padding - left_padding
-        padded_image = cv2.copyMakeBorder(image, 0, 0, left_padding, right_padding, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+        padded_image = cv2.copyMakeBorder(
+            image, 0, 0, left_padding, right_padding, cv2.BORDER_CONSTANT, value=(0, 0, 0))
         concatenated_image = np.vstack((concatenated_image, padded_image))
 
     return concatenated_image

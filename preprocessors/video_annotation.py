@@ -45,9 +45,8 @@ class FrameAnnotation:
                  color_code={},
                  **kwargs) -> None:
         self.obj_mask_key = object_mask_key
-        self.cls_id_map = lambda x: unique_cls_id_map.get(x, x)
-        original_cls_id = {v: k for k, v in unique_cls_id_map.items()}
-        self.original_cls_id_map = lambda x: original_cls_id.get(x, x)
+        self.uniq_cls_id_map = unique_cls_id_map
+        self.cls_id_map = lambda x: unique_cls_id_map.get(x, None)
         self.color_code = color_code
         self.label_mask_key = label_mask_key
         self.ref_text_key = ref_text_key
@@ -61,7 +60,8 @@ class FrameAnnotation:
             self.obj_mask_key,
             **kwargs)
         label_mask = np.vectorize(self.cls_id_map)(context.label_mask)
-        self.context = AnnotationContext(label_mask, context.obj_mask, context.ref_text)
+        self.context = AnnotationContext(
+            label_mask, context.obj_mask, context.ref_text)
 
     def from_prediction(self, pred_path) -> AnnotationContext:
         # TODO: Function to transform predicted color image/ id map to AnnotationContext.

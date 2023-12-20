@@ -1,14 +1,26 @@
 model_name: 'pix2pix_video_segmentor'
 train_val_ratio: [0.95, 0.05]
 skip_prep_data: False
-val_prediction_fstr: 'val_predictions/video_seg/{id}/{annotated_fids}.jpg'
+val_prediction_fstr: 'val_predictions/pix2pix_video_seg/epoch%s/{id}/{annotated_fids}.jpg'
 datasets:
-  a2d-video-segmentation:
+  a2d-video-seg-actor:
     pipeline_fn: "a2d_splits_df"
     train_val_ratio: [0.95, 0.05]
     dataset_dir: '/home/shud/video_datasets'
-
-max_num_objects: 80
+    class_keys: ['actor']
+  #a2d-video-seg-action-actor:
+  #  pipeline_fn: "a2d_splits_df"
+  #  train_val_ratio: [0.95, 0.05]
+  #  dataset_dir: '/home/shud/video_datasets'
+  #a2d-video-seg-action:
+  #  pipeline_fn: "a2d_splits_df"
+  #  train_val_ratio: [0.95, 0.05]
+  #  dataset_dir: '/home/shud/video_datasets'
+  #  class_keys: ['action']
+max_num_objects: 20
+min_confidence: 0.5
+bg_min_confidence: 0.5
+num_classes: 80
 skip_training: False
 input_size: [320, 768]
 pspnet:
@@ -19,7 +31,6 @@ generator:
   in_channels: 3
   features: 64
   n_layers: 6
-  out_channels: 80
 # hourglass settings
 hourglass:
   num_blocks: 3
@@ -33,7 +44,7 @@ patch_size: 256
 gen_features: 64
 n_gen_enc: 6
 disc_features: [64, 128, 256, 512]
-out_channels: 80
+
 in_channels: 3
 l2_lambda: 1.0
 l1_lambda: 100
@@ -46,15 +57,16 @@ use_focal_loss: True
 use_dice_loss: False
 focal_loss:
   alpha: 0.5
+  beta: 0.1
   gamma: 2.0
 features: [64, 128, 256, 512]
 bilinear: True
 
 optimizer:
-  lr: 1.0e-3
+  lr: 1.0e-4
   weight_decay: 1.0e-6
 monitor: 'val_loss'
-epochs: 100
+epochs: 200
 batch_size: 1
 clear_cache: False
 limit:

@@ -68,7 +68,12 @@ class GenCNNBlock(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, in_channels=3, features=64, n_layers=6, out_channels=None):
+    def __init__(self, 
+                 in_channels=3, 
+                 features=64, 
+                 n_layers=6, 
+                 out_channels=None, 
+                 n_aux_classes=1):
         super(Generator, self).__init__()
         out_channels = in_channels if out_channels is None else out_channels
         self.initial = nn.Sequential(
@@ -99,11 +104,21 @@ class Generator(nn.Module):
                 features * out_multiplier,
                 down=False, act='leaky', use_dropout=False))
             in_multiplier = out_multiplier
+        assert n_aux_classes > 0 and isinstance(n_aux_classes, int), \
+            'Number of auxillary classes must be greater than 0.'
+        n_aux_classes = max(n_aux_classes, 1)
         self.output = nn.Sequential(
-            nn.ConvTranspose2d(features*2, out_channels, kernel_size=4, stride=2, padding=1),
+            nn.ConvTranspose2d(
+                features*2, 
+                out_channels * n_aux_classes, 
+                kernel_size=4, 
+                stride=2, 
+                padding=1),
         )
+        self.out_channels = out_channels
+        self.n_aux_classes = n_aux_classes
 
-    def forward(self, x, output_logits=True):
+    def forward(self, x):
         x = self.initial(x)
         encoder_outputs = [x]
         for layer in self.down_layers:
@@ -112,11 +127,12 @@ class Generator(nn.Module):
         x = self.bottleneck(x)
         for layer in self.up_layers:
             x = layer(torch.cat((x, encoder_outputs.pop()), dim=1))
+        # batch_size * (n_proposal * n_classes) * H * W
         x = self.output(torch.cat((x, encoder_outputs.pop()), dim=1))
-        if output_logits:
-            return x
-        else:
-            return torch.tanh(x)
+        # batch_size * n_proposal * n_classes * H * W
+        x = x.view(-1, self.out_channels, self.n_aux_classes, *x.size()[-2:])
+        x_cls = x.mean(dim=-1).mean(dim=-1)
+        return x.max(dim=2).values, x_cls
 
 
 def interpolate_groups(g, ratio, mode, align_corners):

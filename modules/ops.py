@@ -270,15 +270,11 @@ def pairwise_mask_iou(mask1, mask2, smooth=1e-10) -> torch.Tensor:
     area1 = mask1.sum(dim=1).view(1, -1)
     area2 = mask2.sum(dim=1).view(1, -1)
     union = (area1.t() + area2) - intersection
-    #ret = torch.where(
-    #    union == 0,
-    #    torch.tensor(0., device=mask1.device),
-    #    intersection / (union+ smooth))
-    ret = intersection / (union + smooth)
+    ret = (intersection + smooth) / (union + smooth)
     return ret
 
 
-def pairwise_mask_iou_dice(mask1, mask2, smooth=0.01) -> torch.Tensor:
+def pairwise_mask_iou_dice(mask1, mask2, smooth=1e-8) -> torch.Tensor:
     """
     Inputs:
     mask1: NxHxW torch.float32. Consists of [0, 1]
@@ -286,20 +282,49 @@ def pairwise_mask_iou_dice(mask1, mask2, smooth=0.01) -> torch.Tensor:
     Outputs:
     ret: NxM torch.float32. Consists of [0 - 1]
     """
-    N, H, W = mask1.shape
-    M, H, W = mask2.shape
-    mask1 = mask1.view(N, H*W)
-    mask2 = mask2.view(M, H*W)
-    intersection = torch.matmul(mask1, mask2.t())
-    area1 = mask1.sum(dim=1).view(1, -1)
-    area2 = mask2.sum(dim=1).view(1, -1)
-    union = (area1.t() + area2) - intersection
-    #ret = torch.where(
-    #    union == 0,
-    #    torch.tensor(0., device=mask1.device),
-    #    intersection / (union+ smooth))
-    ret = 1 - (intersection + smooth) / (union + smooth)
+    iou = pairwise_mask_iou(mask1, mask2, smooth)
+    ret = 1 - iou
     return ret
+
+
+def pairwise_bce(p, q, smooth=1e-8) -> torch.Tensor:
+    """
+    Inputs:
+    p: MxHxW torch.float32. Consists of [0, 1]
+    q: NxHxW torch.float32. Consists of [0, 1]
+    Outputs:
+    ret: NxM torch.float32. Consists of [0 - 1]
+    """
+    N, H, W = q.shape
+    M, H, W = p.shape
+    q_flat = q.view(N, H * W)
+    p_flat = p.view(M, H * W)
+    log_q_flat = torch.log(q_flat)
+    log_q_neg_flat = torch.log(1 - q_flat)
+    ent = - (torch.matmul(log_q_flat, p_flat.t())
+             + torch.matmul(log_q_neg_flat, 1 - p_flat.t()))
+    ent /= (H * W)
+    return ent
+
+
+def pairwise_cross_entropy(p, q, ignore_indices=[]) -> torch.Tensor:
+    """
+    Inputs:
+    p: M * n_classes torch.float32. Consists of [0, 1]
+    q: N * n_classes torch.float32. Consists of [0, 1]
+    Outputs:
+    ret: N * M torch.float32. Consists of [0 - 1]
+    """
+    n_cls = p.shape[-1]
+    p = p.view(-1, n_cls)
+    q = q.view(-1, n_cls)
+    log_q = torch.log(q)
+    p_ignored = p.clone()
+    if len(ignore_indices) > 0:
+        p_ignored[:, ignore_indices] = 0.0
+    ent = - torch.matmul(log_q, p_ignored.t())
+    ent /= (n_cls - len(ignore_indices))
+    return ent
 
 
 if __name__ == '__main__':

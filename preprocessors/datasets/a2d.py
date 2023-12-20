@@ -5,6 +5,7 @@ import numpy as np
 import json
 
 from preprocessors.constants import *
+from utils import color_utils
 
 
 A2D_METADATA_COLUMNS = [
@@ -24,8 +25,8 @@ A2D_OBJECT_MASK_KEY = 'reMask'
 A2D_LABEL_MASK_KEY = 'reS_id' 
 A2D_REF_TEXT_KEY = 'instance'
 A2D_PROCESSOR = 'a2d_context'
-A2D_COLOR_CODE_PATH = '{root}/a2d_color_code.json'
-A2D_CLASS_ID_NAME_MAP_PATH = '{root}/a2d_class_id_name.json'
+A2D_COLOR_CODE_PATH = '{root}/a2d_color_code_{ds}.json'
+A2D_CLASS_ID_NAME_MAP_PATH = '{root}/a2d_class_id_name_{ds}.json'
 
 
 def root_from_annotation_path(fpath):
@@ -66,7 +67,10 @@ def a2d_annotated_frame_ids(root, vid):
     return FRAME_ID_SEP.join(fids), FRAME_ID_SEP.join(fpaths)
 
 
-def a2d_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwargs):
+def a2d_splits_df(dataset_dir, 
+                  train_val_ratio=[0.95, 0.05], 
+                  class_keys=['action', 'actor'], 
+                  **kwargs):
     df_meta = pd.read_csv(
         A2D_METADATA_PATH.format(root=dataset_dir), header=None,
         dtype=str, na_values=[], parse_dates=False, keep_default_na=False)
@@ -81,31 +85,36 @@ def a2d_splits_df(dataset_dir, train_val_ratio=[0.95, 0.05], **kwargs):
         for line in f.readlines():
             if found:
                 name, iid, valid, R, G, B = line.rstrip().split()
-                label_colors.append({'name': name, 
-                                     'id': int(iid), 
-                                     'R': int(R), 
-                                     'G': int(G),
-                                     'B': int(B)})
+                aa = name.split('-')
+                a1 = aa[0]
+                a2 = '' if len(aa) < 2 else aa[1]
+                cls_name = []
+                for key in class_keys:
+                    if key == 'actor':
+                        cls_name.append(a1)
+                    if key == 'action':
+                        cls_name.append(a2)
+                cls_name = ' '.join(cls_name)
+                cc = color_utils.ColorCode(
+                        name=cls_name,
+                        id=int(iid),
+                        color=(int(R), int(G), int(B)))
+                label_colors.append(cc)
                 aa_id[int(iid)] = name
             found = found or all([kw in line for kw in ['NAME', 'ID', 'Valid','R','G','B']])
         #print(label_colors)
-    col_code_path = A2D_COLOR_CODE_PATH.format(root=dataset_dir)
-    cls_id_path = A2D_CLASS_ID_NAME_MAP_PATH.format(root=dataset_dir)
-    with open(col_code_path, 'w') as f:
-        json.dump(label_colors, f)
-    with open(cls_id_path, 'w') as f:
-        json.dump(aa_id, f)
+    col_code_path = A2D_COLOR_CODE_PATH.format(root=dataset_dir, ds='-'.join(class_keys))
+    color_utils.save_color_codes(label_colors, col_code_path)
     df_meta[CLIP_PATH_KEY] = df_meta['vid'].apply(
         lambda x: A2D_CLIP_PATH.format(root=dataset_dir, vid=x))
     df_meta[[ANNOTATED_FRAME_ID, ANNOTATED_FRAME_PATH]] = df_meta['vid'].apply(
         lambda x: a2d_annotated_frame_ids(dataset_dir, x)).apply(pd.Series)
     df_meta = df_meta[df_meta[ANNOTATED_FRAME_ID] != '']
     df_meta = df_meta[~df_meta[ANNOTATED_FRAME_ID].isna()]
-    df_meta[CLASS_ID_KEY] = df_meta['actor_action_label']
-    df_meta[CLASS_NAME] = df_meta[CLASS_ID_KEY].astype(int).map(aa_id)
+    df_meta[CLASS_NAME] = df_meta['actor_action_label'].astype(int).map(aa_id)
     df_meta[['actor', 'action']] =  df_meta[CLASS_NAME].str.split('-', n=2, expand=True)
+    df_meta[CLASS_ID_KEY] = df_meta['actor_action_label']
     df_meta[SAMPLE_ID_KEY] = df_meta['vid']
-    df_meta[CLASS_ID_NAME_MAP] = cls_id_path
     df_meta[COLOR_CODE] = col_code_path
     df_meta[OBJECT_MASK_KEY] = A2D_OBJECT_MASK_KEY
     df_meta[LABEL_MASK_KEY] = A2D_LABEL_MASK_KEY

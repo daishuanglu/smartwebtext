@@ -7,11 +7,11 @@ import PIL.Image as PilImage
 import re
 import os
 import itertools
-import random
+from functools import partial
 import torch
 from utils.train_utils import device
-from utils import color_utils, image_utils, data_utils
-from modules import pspnet, pix2pix, losses, hourglass
+from utils import color_utils, image_utils, data_utils, visual_utils
+from modules import pspnet, pix2pix, losses, ops, hungarian
 
 
 def flatten_list(nested_list):
@@ -43,7 +43,8 @@ class SegmentationEngine(ptl.LightningModule, ABC):
                  learning_rate=1e-5,
                  predictions_fstr=None,
                  predictions_fsep=None,
-                 out_channels=64):
+                 bg_min_confidence=0.3,
+                 min_confidence=0.3):
         super(SegmentationEngine, self).__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
@@ -53,10 +54,11 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         self.predictions_fstr = predictions_fstr
         self.sep = predictions_fsep if predictions_fsep else None
         self.check_annotations = False
-        label_colors = color_utils.generate_colors(out_channels)
-        self.label_colors = torch.tensor(label_colors).to(device)
         self.val_optimizer_idx = 1
         self.loss_names = None
+        self.bg_conf_thresh = bg_min_confidence
+        self.conf_thresh = min_confidence
+        self.label_colors = []
 
     def build_network(self):
         assert NotImplementedError(), 'Need to implement the network architecture.'
@@ -85,20 +87,53 @@ class SegmentationEngine(ptl.LightningModule, ABC):
                 self.untoggle_optimizer(opt)
 
     def get_prediction_path(self, batch):
-        variable_keys = re.findall(r'{(.*?)}', self.predictions_fstr)
-        # get path variables
+        epoch_pred_fstr = self.predictions_fstr % (str(self.current_epoch))
+        variable_keys = re.findall(r'{(.*?)}', epoch_pred_fstr)
+        # Get path variables
         fstr_var_values = []
-
+        # Flatten a batch of multiple video frame_ids into a list of strings.
         for key_values in zip(*[batch[key] for key in variable_keys]):
             key_vals = [
                 val.split(self.sep) if self.sep is not None else [val] for val in key_values]
             fstr_var_values += list(itertools.product(*key_vals)).copy()
-
+        # Create save path for each frame.
         prediction_file_paths = []
         for vals in fstr_var_values:
             fvals = {k: v for k, v in zip(variable_keys, vals)}
-            prediction_file_paths.append(self.predictions_fstr.format(**fvals))
+            prediction_file_paths.append(epoch_pred_fstr.format(**fvals))
         return prediction_file_paths
+
+    def to_contours(self, probs, input_image=None):
+        probs = probs.clone().detach()
+        masks = probs.cpu().numpy() > self.bg_conf_thresh
+        color_segments = visual_utils.draw_contours(masks, input_image)
+        return color_segments
+
+    def to_label_colors(self, probs, cls_probs):
+        probs, cls_probs = probs.clone().detach(), cls_probs.clone().detach()
+        # n_proposals * H * W
+        proposal_masks = probs > self.bg_conf_thresh
+        # n_proposals
+        max_cls_prob, cls_labels = cls_probs.max(-1)
+        # n_proposals * 1 * 1
+        cls_labels  = cls_labels.unsqueeze(-1).unsqueeze(-1)
+        # n_proposals * H * W
+        proposal_labels = (proposal_masks * cls_labels).long()
+        valid_proposal = max_cls_prob > self.conf_thresh
+        if valid_proposal.sum() == 0:
+            valid_proposal = (max_cls_prob == max_cls_prob.max())
+        valid_probs = max_cls_prob[valid_proposal].detach()
+        # n_selected_proposals * H * W
+        proposal_labels = proposal_labels[valid_proposal].detach()
+         # H * W
+        segment_labels = torch.zeros_like(proposal_labels)[0]
+        for i in valid_probs.argsort():
+            segment_labels = torch.where(
+                proposal_labels[i] != 0, proposal_labels[i], segment_labels)
+        segment_labels = segment_labels.detach().cpu().numpy()
+        # H * W * 3
+        segment_label_colors = visual_utils.colorize_labels(segment_labels, self.label_colors)
+        return segment_label_colors
 
     def validation_step(self, batch, batch_nb):
         outputs = self(
@@ -106,18 +141,20 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         loss = outputs['loss'].item()
         if self.predictions_fstr is not None:
             predictions_paths = self.get_prediction_path(batch)
-            if len(outputs['prob'][0].size()) == 4:
-                probs = [p for probs in outputs['prob'] for p in probs]
-            else:
-                probs = outputs['prob']
-            for output, save_path in zip(probs, predictions_paths):
-                if self.check_annotations:
-                    color_segments = self.label_colors[output.permute(1,2,0).argmax(axis=-1)]
-                    color_segments = color_segments.detach().cpu().numpy()
-                else:
-                    color_segments = (output * 255).long().permute(1, 2, 0).detach().cpu().numpy()
+            fidx = sum([list(zip([i] * q.size(0), range(q.size(0)))) 
+                    for i, q in enumerate(outputs['cls_prob'])], [])
+            for i, frame in enumerate(flatten_list(batch['frames'])):
+                save_path = predictions_paths[i]
+                iv, ind = fidx[i]
+                q = outputs['prob'][iv][ind]
+                q_cls = outputs['cls_prob'][iv][ind]
+                segment_conts = self.to_contours(q, frame.detach().cpu().numpy())
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                PilImage.fromarray(color_segments.astype('uint8')).save(save_path)
+                PilImage.fromarray(segment_conts.astype('uint8')).save(save_path)
+                label_col_save_path = save_path.replace('.jpg', '_labcol.jpg')
+                segment_label_colors = self.to_label_colors(q, q_cls)
+                PilImage.fromarray(
+                        segment_label_colors.astype('uint8')).save(label_col_save_path)
         self.log_dict({'val_loss': loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
         return {'loss': loss}
 
@@ -126,9 +163,12 @@ class SegmentationEngine(ptl.LightningModule, ABC):
 
     def segments(self, list_of_images: List[np.array]):
         self.eval()
-        outputs, _ = self({'frames': [torch.from_numpy(img) for img in list_of_images]})
-        segments = [(output*255).long().permute(1, 2, 0).detach().numpy() for output in outputs]
-        return segments.astype('uint8')
+        batch = {'frames': [torch.from_numpy(img).to(device) for img in list_of_images]}
+        outputs, _ = self(batch)
+        conts = []
+        for output, img, in zip(outputs, list_of_images):
+            conts.append(self.to_contours(output['prob'], img.detach().cpu().numpy()))
+        return conts.astype('uint8'), outputs
 
 
 class BaseSegmentor(SegmentationEngine):
@@ -137,29 +177,36 @@ class BaseSegmentor(SegmentationEngine):
             batch_size=config['batch_size'],
             predictions_fstr=config.get('val_prediction_fstr', None),
             predictions_fsep=multi_fname_sep,
-            out_channels=config['out_channels']
+            min_confidence=config.get('min_confidence', 0.3),
+            bg_min_confidence=config.get('bg_min_confidence', 0.3),
         )
-        self.check_annotations = True
+        self.backbone = None
+        self.head = None
         self.config = config
+        self.num_proposals = self.config.get('max_num_objects', 20)
+        self.n_classes = self.config.get('num_classes', 1)
         self.build_network()
         self.val_optimizer_idx = 0
-        self.dice = losses.DiceLoss()
         self.nll = torch.nn.NLLLoss()
+        self.dice = losses.DiceLoss()
         # Focal loss shows some NaN loss values.
         self.focal = losses.FocalLossV1(**self.config['focal_loss'])
-        obj_label_colors = color_utils.generate_colors(self.config['out_channels'])
-        self.obj_label_colors = torch.tensor(obj_label_colors).to(device)
+        self.label_colors = color_utils.generate_colors(self.n_classes)
 
     def build_network(self):
         #self.gen = pspnet.build_network(**self.config['pspnet'])
         #self.gen = HourglassNetSimple(Bottleneck, **self.config['hourglass'])
-        #self.gen = hourglass.HourglassNet(hourglass.Bottleneck, **self.config['hourglass'])
-        self.gen = pix2pix.Generator(**self.config['generator'])
+        #self.backbone = hourglass.HourglassNet(hourglass.Bottleneck, **self.config['hourglass'])
+        #self.config['generator']['in_channels'] = self.config['hourglass']['num_classes']
+        self.head = pix2pix.Generator(
+            out_channels=self.num_proposals, 
+            n_aux_classes=self.n_classes,
+            **self.config['generator'])
 
     def configure_optimizers(self):
         b1, b2 = 0.5, 0.999
         opt = torch.optim.AdamW(
-            self.gen.parameters(), betas=(b1, b2), **self.config['optimizer'])
+            self.parameters(), betas=(b1, b2), **self.config['optimizer'])
         self.loss_names = ['label_plus_obj_loss']
         return [opt], []
 
@@ -167,21 +214,28 @@ class BaseSegmentor(SegmentationEngine):
         xs = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
         xs = [pspnet.resnet_preprocess(x) for x in xs]
         xs = torch.stack(xs)
-        y_logits = self.gen(xs)
+        if self.backbone is not None:
+            xs = self.backbone(xs)
+        # (batch_size * n_proposal * H * W), (batch_size * n_proposal * n_classes)
+        y_logits, y_cls = self.head(xs)
         output_logits = []
+        output_cls_logits = []
         idx = 0
         for n, fsize in n_frames_sizes:
             logits = torch.nn.functional.interpolate(
                 y_logits[idx: idx + n], size=fsize, mode='bilinear')
             output_logits.append(logits)
+            output_cls_logits.append(y_cls[idx: idx + n])
             idx += n 
-        return output_logits
+        return output_logits, output_cls_logits
 
     def forward_patches(self, batch, n_frames_sizes):
         xs = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
         x_patches, x_coords = image_utils.image_tensors_to_patches(xs, self.config['patch_size'])
         x_patches = x_patches.to(device).float()
-        y_logits = self.gen(x_patches)
+        if self.backbone is not None:
+            x_patches = self.backbone(x_patches)
+        y_logits = self.head(x_patches)
         y_logits = image_utils.patches_to_image_tensors(y_logits, x_coords)
         idx = 0
         output_logits = []
@@ -191,273 +245,82 @@ class BaseSegmentor(SegmentationEngine):
             idx += n 
         return  output_logits
     
-    def custom_loss(self, target_one_hot, q):
-        local_loss = local_mse(target_one_hot, q)
-        # local_loss = local_nll(label_mask_onehot, output_logits[i])
-        n_pixels = target_one_hot.size(-1) * target_one_hot.size(-2)
-        # Calculate label weights for each image.
-        target_ratio = target_one_hot.sum((-1, -2), keepdim=True) / n_pixels
-        # broadcast weighted loss separately for each image.
-        loss = local_loss * ((1 - target_ratio) ** self.config['focal_loss']['gamma'])
-        # what if we only populate loss gradients when there is an object.
-        loss = loss[target_ratio.squeeze() > 0].mean()
-        return loss
+    def custom_obj_loss(self, target_one_hot, q):
+        """
+        Custom object los for each frame. We will have to calculate hungarian loss for each frame
+        because each video frame may have different number of true objects.
+
+        :param target_one_hot: A pixel-wise annotated for a single video frame in shape n_frames *
+            n_objs * image_width * image_height.
+        :param q: A pixel-wise predicted object proposal tensor for a single video frame in shape
+            n_frames * n_objs * image_width * image_height.
+        :return: Average IoU dice loss/ hungarian loss per frame calculated based on the closest 
+            matched object mask.
+        """
+        # Sigmoid + hungarian iou loss works.
+        iou_loss = hungarian.hungarian_loss(target_one_hot, q, ops.pairwise_mask_iou_dice)
+        return iou_loss.mean()
+
+    def custom_annotation_loss(self, target_onehot, q_cls):
+        """
+        Custom annotation loss for each proposal object.
+
+        :param target_one_hot: n_frames * n_proposals * n_classes. Onehot groundtruth object 
+            annotation class labels.
+        :param q_cls: n_frames * n_proposals *  n_classes. Predicted softmax class label
+            probabilities for each proposal mask.
+        :return: Average of Huangarian cross entropy per frame.
+        """
+        pairwise_loss_fn = partial(ops.pairwise_cross_entropy, ignore_indices=[0])
+        annotation_loss = hungarian.hungarian_loss(target_onehot, q_cls, pairwise_loss_fn)
+        return annotation_loss.mean()
 
     def forward(self, batch, compute_loss=False, optimizer_idx=0):
         n_frames_sizes = [(len(fs), fs[0].size()[:2]) for fs in batch['frames']]
-        output_logits = self.forward_resizes(batch, n_frames_sizes)
+        output_logits, output_cls_logits = self.forward_resizes(batch, n_frames_sizes)
         # smoothed softmax: https://stackoverflow.com/questions/44081007/logsoftmax-stability
-        bs = [torch.max(logits, dim=1, keepdim=True).values for logits in output_logits]
-        q = [torch.softmax(logits - b, dim=1)   for b, logits in zip(bs, output_logits)]
+        #bs = [torch.max(logits, dim=1, keepdim=True).values for logits in output_cls_logits]
+        #q_cls = [torch.softmax(logits - b, dim=1) for b, logits in zip(bs, output_cls_logits)]
+        # n_frames * n_proposal * n_classes
+        q_cls = [torch.softmax(logits, dim=-1) for logits in output_cls_logits]
+        # n_frames * n_proposal * n_classes * H * W, Softmax along class dimensions.
+        q = [torch.sigmoid(logits) for logits in output_logits]
         loss = None
         if compute_loss:
             batch_gt = data_utils.collate_dict(batch['gt_frames']) 
             loss = 0.0
-            for i in range(len(n_frames_sizes)):
-                label_mask = torch.stack(batch_gt['label_mask'][i])
-                label_mask_onehot = torch.nn.functional.one_hot(
-                    label_mask, num_classes=self.config['out_channels'])
-                label_mask_onehot = label_mask_onehot.permute(0, 3, 1, 2)
-                label_mask_onehot =  label_mask_onehot.float()
-                loss += self.custom_loss(label_mask_onehot, q[i])
-                #loss += self.dice(label_mask_onehot, q[i])
-                #loss += self.focal(torch.log(q[i]), label_mask_onehot)
+            for iv in range(len(n_frames_sizes)):
+                # The number of objects in each frame varies. We can't proposed background for
+                # generality.
+                gt_obj_masks = [pad_or_crop_obj_mask(mask, self.num_proposals)
+                    for mask in batch_gt['obj_mask'][iv]]
+                obj_mask_onehot = torch.stack(gt_obj_masks).float().contiguous()
+                # This only applies on background label is assumed to be 0 dim.
+                loss += self.custom_obj_loss(obj_mask_onehot, q[iv])
+                # n_frames * H * W
+                label_masks = torch.stack(batch_gt['label_mask'][iv])
+                # n_frames * n_proposal * H * W
+                obj_label_masks = obj_mask_onehot * label_masks.unsqueeze(1)
+                # This only applies when background label is assumed to be 0 dim.
+                # n_frames * n_proposal * (HW)
+                flatten_obj_label_masks = obj_label_masks.view(*obj_label_masks.size()[:-2], -1)
+                obj_label_count = torch.count_nonzero(flatten_obj_label_masks, dim=-1)
+                obj_label_count = torch.where(
+                    obj_label_count == 0, torch.tensor(1e-6), obj_label_count)
+                # n_frames * n_proposal 
+                obj_labels = flatten_obj_label_masks.sum(-1) / obj_label_count
+                # n_frames * n_proposal * n_classes
+                obj_labels_onehot = torch.nn.functional.one_hot(
+                    obj_labels.long(), num_classes=self.n_classes)
+                obj_labels_onehot = obj_labels_onehot.float().contiguous()
+                # n_frames * n_proposal * (HW + n_classes)
+                flatten_obj_mask_onehot = obj_mask_onehot.view(*obj_mask_onehot.size()[:-2], -1)
+                ext_obj_labels_onehot = torch.concat(
+                    [obj_labels_onehot, flatten_obj_mask_onehot], dim=-1)
+                flatten_q_iv = q[iv].view(*q[iv].size()[:-2], -1)
+                ext_q_cls_iv = torch.concat([q_cls[iv], flatten_q_iv], dim=-1)
+                loss += self.custom_annotation_loss(ext_obj_labels_onehot, ext_q_cls_iv)
+                #loss += self.custom_annotation_loss(obj_labels_onehot, q_cls[iv])
             loss /= len(n_frames_sizes)
-        return {'prob': q, 'loss': loss}
+        return {'prob': q, 'cls_prob': q_cls, 'loss': loss}
 
-
-class Pix2PixMotion(SegmentationEngine):
-    def __init__(self, config, multi_fname_sep=None):
-        super(Pix2PixMotion, self).__init__(
-            batch_size=config['batch_size'],
-            learning_rate=config['learning_rate'],
-            predictions_fstr=config.get('val_prediction_fstr', None),
-            predictions_fsep=multi_fname_sep,
-            label_colors_json=config.get('label_colors_json', None)
-        )
-        self.config = config
-        self.build_network()
-        self.mse = nn.MSELoss()
-        self.l1 = nn.L1Loss()
-        self.ce = nn.CrossEntropyLoss()
-        self.val_optimizer_idx = 1
-
-    def build_network(self):
-        gen_in_channels = self.config['in_channels']
-        self.gen_out_channels = self.config['in_channels'] + self.config['out_channels']
-        self.gen = Generator(
-            gen_in_channels,
-            features=self.config['gen_features'],
-            n_layers=self.config['n_gen_enc'],
-            out_channels=self.gen_out_channels)
-        disc_input_channel = self.config['in_channels'] * 2
-        disc_output_channel = self.config['in_channels']
-        self.disc = Discriminator(
-            disc_input_channel,
-            self.config['disc_features'],
-            disc_output_channel)
-        self.kp_extractor = keypoint_detector.KPDetector(
-            **self.config['tps_model_params']['common_params'])
-        self.bg_predictor = bg_motion_predictor.BGMotionPredictor()
-        self.global_gru = GlobalHiddenUpdater(g_dim=self.gen_out_channels)
-        self.num_tps = self.config['tps_model_params']['common_params']['num_tps']
-        self.tps_deformed_weigthed_sum = nn.Linear(self.num_tps+1, 1)
-        #self.motion = GeneratorFullModelFromConfig(
-        #    self.config['tps_model_params'],
-        #    self.config['tps_train_params'])
-        #self.hourglass_gru = Hourglass(
-        #    block_expansion=self.config['out_channels'],
-        #    in_features=self.gen_out_channels*2,
-        #    **self.config['hourglass_gru_params'])
-
-    def configure_optimizers(self):
-        b1, b2 = 0.5, 0.999
-        opt_g = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
-        opt_d = torch.optim.Adam(self.disc.parameters(), lr=self.lr, betas=(b1, b2))
-        #opt_a = torch.optim.Adam(self.gen.parameters(), lr=self.lr, betas=(b1, b2))
-        opt_m = torch.optim.Adam([
-            {'params': self.gen.parameters()},
-            {'params': self.global_gru.parameters()},
-            {'params': self.bg_predictor.parameters()},
-            {'params': self.kp_extractor.parameters()}
-        ], lr=self.lr, betas=(b1, b2))
-        #opt_m = torch.optim.Adam(
-        #    self.motion.parameters(),
-        #    lr=self.config['tps_train_params']['lr_generator'],
-        #    betas=(b1, b2), weight_decay=1e-4)
-        self.loss_names = ['d_loss', 'g_loss', 'm_loss']
-        return [opt_d, opt_g, opt_m], []
-
-    def create_transformations(self, source_image, kp_driving, kp_source, bg_param):
-        # K TPS transformaions
-        bs, _, h, w = source_image.shape
-        kp_1 = kp_driving['fg_kp']
-        kp_2 = kp_source['fg_kp']
-        kp_1 = kp_1.view(bs, -1, 5, 2)
-        kp_2 = kp_2.view(bs, -1, 5, 2)
-        trans = TPS(mode = 'kp', bs = bs, kp_1 = kp_1, kp_2 = kp_2)
-        driving_to_source = trans.transform_frame(source_image)
-
-        identity_grid = make_coordinate_grid((h, w), type=kp_1.type()).to(kp_1.device)
-        identity_grid = identity_grid.view(1, 1, h, w, 2)
-        identity_grid = identity_grid.repeat(bs, 1, 1, 1, 1)
-
-        # affine background transformation
-        if not (bg_param is None):
-            identity_grid = to_homogeneous(identity_grid)
-            identity_grid = torch.matmul(bg_param.view(bs, 1, 1, 1, 3, 3), identity_grid.unsqueeze(-1)).squeeze(-1)
-            identity_grid = from_homogeneous(identity_grid)
-
-        transformations = torch.cat([identity_grid, driving_to_source], dim=1)
-        return transformations
-
-    def create_deformed_source_image(self, source_image, transformations):
-
-        bs, _, h, w = source_image.shape
-        source_repeat = source_image.unsqueeze(1).unsqueeze(1).repeat(1, self.num_tps + 1, 1, 1, 1, 1)
-        source_repeat = source_repeat.view(bs * (self.num_tps + 1), -1, h, w)
-        transformations = transformations.view((bs * (self.num_tps + 1), h, w, -1))
-        deformed = F.grid_sample(source_repeat, transformations, align_corners=True)
-        deformed = deformed.view((bs, self.num_tps+1, -1, h, w))
-        return deformed
-
-    def disc_loss(self, x, y_fake_probs, gt_imgs, n_frames):
-        D_loss = 0
-        for i in range(n_frames):
-            x[i] = x[i].to(device)
-            D_real = self.disc(x[i].unsqueeze(0), gt_imgs[i].unsqueeze(0))
-            D_fake = self.disc(x[i].unsqueeze(0), y_fake_probs[i].detach().unsqueeze(0))
-            D_real_loss = self.mse(D_real, torch.ones_like(D_real))
-            D_fake_loss = self.mse(D_fake, torch.zeros_like(D_fake))
-            D_loss += (D_real_loss + D_fake_loss) / 2
-        D_loss /= n_frames
-        return D_loss
-
-    def gen_loss(self, x, y_fake_probs, gt_imgs, n_frames):
-        # generator loss
-        G_loss = 0
-        for i in range(n_frames):
-            D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
-            G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
-            L1 = self.l1(y_fake_probs[i], gt_imgs[i]) * self.config['l1_lambda']
-            G_loss += G_fake_loss + L1
-        G_loss /= n_frames
-        return G_loss
-
-    def annotation_loss(self, x, y_fake_probs, y_preds_logits, gt_index, n_frames):
-        G_loss = 0
-        for i in range(n_frames):
-            D_fake = self.disc(x[i].to(device).unsqueeze(0), y_fake_probs[i].unsqueeze(0))
-            G_fake_loss = self.mse(D_fake, torch.ones_like(D_fake))
-            y_pred_logit = y_preds_logits[i].permute(1, 2, 0).view(-1, y_preds_logits[i].shape[0])
-            L2 = self.ce(y_pred_logit, gt_index[i].reshape(-1))
-            # L2 = self.mse(y_preds[i], gt_onehot[i]) * self.config['l2_lambda']
-            G_loss += G_fake_loss + L2
-        G_loss /= n_frames
-        return G_loss
-
-    def frame_predictions(self, x):
-        x_patches, x_coords = image_utils.image_tensors_to_patches(x, self.config['patch_size'])
-        x_patches = x_patches.to(device).float()
-        y_fake_logits = self.gen(x_patches)
-        y_fake_logits = image_utils.patches_to_image_tensors(y_fake_logits, x_coords)
-        #y_fake_probs = [torch.tanh(logits) for logits in y_fake_logits]
-        #y_preds_logits = [y_fake[self.config['in_channels']:, :, :] for y_fake in y_fake_logits]
-        #y_fake_probs = [y_fake[:self.config['in_channels'], :, :] for y_fake in y_fake_probs]
-        return y_fake_logits
-
-    def get_driving_ids(self, batch, compute_loss):
-        n_driving_ids = [len(batch_frames) for batch_frames in batch['frames']]
-        driving_ids = [list(range(n)) for n in n_driving_ids]
-        ni_driving_ids = np.repeat(np.cumsum([0]+n_driving_ids[:-1]), n_driving_ids)
-        if compute_loss:
-            # shuffle frames for training
-            for ids in driving_ids:
-                random.shuffle(ids)
-            driving_ids = np.array(flatten_list(driving_ids)) + ni_driving_ids
-            return driving_ids
-        else:
-            # 1-step rotate frames for testing, maybe all use first frame is ok?
-            return ni_driving_ids
-
-    def deform(self, source, driving):
-        source_image = source[:self.config['in_channels'], :, :].unsqueeze(0)
-        driving_image = driving[:self.config['in_channels'], :, :].unsqueeze(0)
-        kp_source = self.kp_extractor(source_image)
-        kp_driving = self.kp_extractor(driving_image)
-        bg_param = self.bg_predictor(source_image, driving_image)
-        #heatmap_representation = self.create_heatmap_representations(source_image, kp_driving, kp_source)
-        transformations = self.create_transformations(source_image, kp_driving, kp_source, bg_param)
-        deformed_source = self.create_deformed_source_image(source.unsqueeze(0), transformations)
-        deformed_source = deformed_source.permute(0, 2,3,4,1)
-        output_deformed_source = self.tps_deformed_weigthed_sum(deformed_source)
-        return output_deformed_source.squeeze(-1)
-
-    def forward(self, batch, compute_loss=False, optimizer_idx=0):
-        x = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
-        driving_ids= self.get_driving_ids(batch, compute_loss)
-        x_driving = [x[i] for i in driving_ids]
-        if not compute_loss:
-            x, x_driving = x_driving, x
-        n_frames = len(x)
-        y_fake_logits = self.frame_predictions(x)
-        y_fake_driving_logits = self.frame_predictions(x_driving)
-        y_preds_deformed_logits = [self.deform(
-                y_pred, drv) for y_pred, drv in zip(y_fake_logits, x_driving)]
-        y_fake_driving_logits_gated = [self.global_gru(
-            deformed_logits, drv_logits.unsqueeze(0)) for deformed_logits, drv_logits in zip(
-                y_preds_deformed_logits, y_fake_driving_logits)]
-        # Produce source and driving image segmentation color generation probability
-        y_fake_probs = [torch.tanh(logits[:self.config['in_channels'], :, :]) for logits in y_fake_logits]
-        y_fake_driving_probs = [torch.tanh(
-            logits[:self.config['in_channels'], :, :]) for logits in y_fake_driving_logits]
-        # Produce driving image segmentation color generation probability
-        y_fake_driving_probs_gated = [torch.tanh(logits.squeeze(
-            0)[:self.config['in_channels'], :, :]) for logits in y_fake_driving_logits_gated]
-        loss = None
-        if compute_loss:
-            # extract gt
-            gts = flatten_list(batch['gt_frames'])
-            gt_imgs = [self.label_colors[self.color_index[gt.to(device)]] for gt in gts]
-            gt_imgs = [gt_img.permute(2, 0, 1).float() / 255 for gt_img in gt_imgs]
-            #gt_index = [self.color_index[gt.to(device)] for gt in gts]
-            gt_imgs_driving = [gt_imgs[i] for i in driving_ids]
-            #gt_index_driving = [gt_index[i] for i in driving_ids]
-            if optimizer_idx == 0:
-                # static loss
-                D_loss = self.disc_loss(x, y_fake_probs, gt_imgs, n_frames)
-                D_loss += self.disc_loss(
-                    x_driving, y_fake_driving_probs, gt_imgs_driving, n_frames)
-                loss = D_loss / 2
-            if optimizer_idx == 1:
-                G_loss = self.gen_loss(x, y_fake_probs, gt_imgs, n_frames)
-                G_loss += self.gen_loss(x_driving,
-                                        y_fake_driving_probs,
-                                        gt_imgs_driving,
-                                        n_frames)
-                loss = G_loss / 2
-            if optimizer_idx == 2:
-                M_loss = self.gen_loss(x_driving,
-                                     y_fake_driving_probs_gated,
-                                     gt_imgs_driving,
-                                     n_frames)
-                loss = M_loss
-        return y_fake_driving_probs_gated, y_fake_driving_logits_gated, loss
-            #if optimizer_idx == 2:
-            #    M_loss = 0
-            #    for src, drv in zip(gt_imgs, gt_imgs_driving):
-            #        motion_loss, generated = self.motion(
-            #            {'source': src.unsqueeze(0), 'driving': drv.unsqueeze(0)}, self.current_epoch)
-            #        loss_values = [val.mean() for val in motion_loss.values()]
-            #        M_loss += sum(loss_values)
-            #    M_loss /= (n_frames *2)
-            #    return y_fake_driving_probs, y_preds_driving_logits, M_loss
-            #if optimizer_idx == 2:
-            #    A_loss = self.annotation_loss(x, y_fake, y_preds, gt_imgs, gt_onehot, n_frames)
-            #    A_loss += self.annotation_loss(x_driving,
-            #                            y_fake_driving,
-            #                            y_preds_driving,
-            #                            gt_imgs_driving,
-            #                            gt_onehot_driving,
-            #                            n_frames)
-            #    return y_fake, A_loss

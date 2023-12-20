@@ -1,15 +1,14 @@
 import os
-
+import pickle
 import pandas as pd
 import torch
-from preprocessors.video_annotation import FrameAnnotation
 from tqdm import tqdm
 from PIL import Image as PilImage
 import pims
-
 from preprocessors import pipelines
 from utils import train_utils, data_utils
 from models import segmentation
+from preprocessors.video_annotation import FrameAnnotation
 
 
 def load_frame_images(feature_dict):
@@ -22,12 +21,13 @@ def load_frame_images(feature_dict):
     return samples
 
 
-def load_frame_annotation(feature_dict):
+def load_frame_annotation(feature_dict, unique_cls_id_map={}):
     annotation = FrameAnnotation(
         object_mask_key=feature_dict[pipelines.OBJECT_MASK_KEY], 
         label_mask_key=feature_dict[pipelines.LABEL_MASK_KEY], 
         ref_text_key=feature_dict[pipelines.REF_TEXT_KEY],
-        processor=feature_dict[pipelines.ANNOTATION_PROCESSOR])
+        processor=feature_dict[pipelines.ANNOTATION_PROCESSOR],
+        unique_cls_id_map=unique_cls_id_map[feature_dict[pipelines.DATASET_KEY]])
     obj_masks = []
     label_masks = []
     ref_texts = []
@@ -55,15 +55,21 @@ def main():
         pipelines.ANNOTATED_FRAME_ID: (lambda x: str(x)),
         pipelines.ANNOTATED_FRAME_PATH: (lambda x: str(x)),
         pipelines.SAMPLE_ID_KEY: (lambda x: str(x)),
+        pipelines.DATASET_KEY: (lambda x: str(x))
     }
+    with open(pipelines.UNIQUE_CLS_ID_PATH, 'rb') as fp:
+        unique_cls_id_map = pickle.load(fp)
+        print('Unique region class IDs map:')
+        print(unique_cls_id_map)
     train_a2d_cols = {
         'frames': lambda x: load_frame_images(x),
-        'gt_frames': lambda x: load_frame_annotation(x)
+        'gt_frames': lambda x: load_frame_annotation(x, unique_cls_id_map)
     }
     logger_dir = config.get("logger_dir", train_utils.DEFAULT_LOGGER_DIR)
     os.makedirs(logger_dir, exist_ok=True)
     model_obj = segmentation.BaseSegmentor(
-        config, multi_fname_sep=pipelines.FRAME_ID_SEP).to(train_utils.device)
+        config,
+        multi_fname_sep=pipelines.FRAME_ID_SEP).to(train_utils.device)
     print("model initialized. ")
     latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name']) \
         if config['resume_ckpt'] else None
@@ -107,16 +113,16 @@ def main():
     os.makedirs(model_eval_dir, exist_ok=True)
     print("generate evaluation results. ")
     model = train_utils.load(model_obj, latest_ckpt_path).to(train_utils.device)
-    test_meta_path = pipelines.VID_SEG_TRAIN_SPLIT_CSV.format(
-        root=config['dataset_dir'], split='test')
+    test_meta_path = pipelines.VID_SEG_TRAIN_SPLIT_CSV.format(split='test')
     df_test_meta = pd.read_csv(
-        test_meta_path, dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
+        test_meta_path, sep=pipelines.VID_SEG_DATASET_SEP, dtype=str, parse_dates=False,
+        na_values=[], keep_default_na=False)
     for _, row in tqdm(df_test_meta.iterrows(), total=len(df_test_meta), desc='test video segmentation'):
         os.makedirs(os.path.join(model_eval_dir, row[pipelines.SAMPLE_ID_KEY]), exist_ok=True)
         v = pims.Video(row[pipelines.CLIP_PATH_KEY])
         for fid in row[pipelines.ANNOTATED_FRAME_ID].split(pipelines.FRAME_ID_SEP):
             output_fname = os.path.join(model_eval_dir, row[pipelines.SAMPLE_ID_KEY]+'/'+fid+'.jpg')
-            segments = model.segments([v[int(fid)]])[0]
+            segments, _ = model.segments([v[int(fid)]])[0]
             output_image = PilImage.fromarray(segments, mode='RGB')
             output_image.save(output_fname)
 

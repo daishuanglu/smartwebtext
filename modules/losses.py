@@ -49,7 +49,6 @@ class DiceLoss(nn.Module):
         dims = (1, 2, 3)
         intersection = torch.sum(input_soft * target_one_hot, dims)
         cardinality = torch.sum(input_soft + target_one_hot, dims)
-
         dice_score = 2. * intersection / (cardinality + self.eps)
         return torch.mean(1. - dice_score)
 
@@ -75,14 +74,14 @@ def focal_loss_stable(y_real, y_pred, eps = 1e-8, gamma = 0):
         y_pred - y_real * y_pred + torch.log(1 + torch.exp(-y_pred)))
 
 
-##
 # version 1: use torch.autograd
 class FocalLossV1(nn.Module):
 
     def __init__(self,
                  alpha=0.25,
                  gamma=2,
-                 reduction='mean'):
+                 reduction='mean',
+                 **kwargs):
         super(FocalLossV1, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
@@ -117,7 +116,7 @@ class FocalLossV1(nn.Module):
 
 if __name__=='__main__':
     # end class MulticlassDiceLoss
-    criterion = MulticlassDiceLoss(num_classes=3)
+    criterion = DiceLoss(num_classes=3)
     y = torch.randn(10, 3, 4, 4)
     targets = torch.randint(0, 3, (10, 4, 4))
     print(y.shape)

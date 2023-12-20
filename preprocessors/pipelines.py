@@ -1,5 +1,7 @@
-
+from collections import OrderedDict
 from utils import color_utils
+import dill
+
 from preprocessors.constants import *
 from preprocessors.datasets.a2d import *
 from preprocessors.datasets.bsds import *
@@ -90,7 +92,8 @@ VID_SEG_COLS = [SAMPLE_ID_KEY,
                 LABEL_MASK_KEY,
                 ANNOTATION_PROCESSOR]
 VID_SEG_DATASET_SEP = '\t'
-UNIQUE_COLOR_ID_MAP_PATH = 'data_model/video_seg_unique_color_id_map.json'
+UNIQUE_COLOR_ID_PATH = 'data_model/video_seg_unique_color_id_map.json'
+UNIQUE_CLS_ID_PATH = 'data_model/video_seg_unique_cls_id_map.pkl'
 
 
 def mixed_video_segmentation(dataset_configs):
@@ -105,17 +108,19 @@ def mixed_video_segmentation(dataset_configs):
             df[col] = ''
         assert COLOR_CODE in df.columns, \
             f'Video segmentation dataset {ds_name} error: Missing color code.'
-        df_color_code = df[[DATASET_KEY, COLOR_CODE]]
-        df_color_code = df_color_code.set_index(DATASET_KEY)[COLOR_CODE]
-        uniq_color_codes = []
-        for color_code_path in df_color_code.unique().tolist():
-            with open(color_code_path, 'r') as f:
-                uniq_color_codes.append(json.load(f))
-        uniq_color_id_map, _, _ = color_utils.uniq_color_id_coder(uniq_color_codes)
-        with open(UNIQUE_COLOR_ID_MAP_PATH, 'w') as f:
-            json.dump(uniq_color_id_map, f)
         dfs.append(df)
     dfs = pd.concat(dfs)
+    df_color_code = dfs[[DATASET_KEY, COLOR_CODE]]
+    df_color_code = df_color_code.set_index(DATASET_KEY)[COLOR_CODE]
+    df_color_code = df_color_code[~df_color_code.index.duplicated(keep='first')]
+    ds_color_codes = OrderedDict(df_color_code.to_dict())
+    uniq_color_codes, uniq_cls_id_map = color_utils.uniq_color_code(
+            [color_utils.load_color_codes(cpath) for cpath in ds_color_codes.values()])
+    color_utils.save_color_codes(uniq_color_codes, UNIQUE_COLOR_ID_PATH)
+    ds_names = list(ds_color_codes.keys())
+    uniq_cls_id_map = {ds_names[k]: v for k, v in uniq_cls_id_map.items()}
+    with open(UNIQUE_CLS_ID_PATH, 'wb') as fp:
+        dill.dump(uniq_cls_id_map, fp)
     for split in dfs[SPLIT_KEY].unique():
         df = dfs[dfs[SPLIT_KEY] == split]
         df.to_csv(VID_SEG_TRAIN_SPLIT_CSV.format(split=split), 
