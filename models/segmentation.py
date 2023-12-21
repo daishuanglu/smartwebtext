@@ -44,7 +44,8 @@ class SegmentationEngine(ptl.LightningModule, ABC):
                  predictions_fstr=None,
                  predictions_fsep=None,
                  bg_min_confidence=0.3,
-                 min_confidence=0.3):
+                 min_confidence=0.3,
+                 max_val_viz_batch=5):
         super(SegmentationEngine, self).__init__()
         self.save_hyperparameters()
         self.automatic_optimization = False
@@ -59,6 +60,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         self.bg_conf_thresh = bg_min_confidence
         self.conf_thresh = min_confidence
         self.label_colors = []
+        self.max_val_viz_batch = max_val_viz_batch
 
     def build_network(self):
         assert NotImplementedError(), 'Need to implement the network architecture.'
@@ -110,27 +112,22 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         return color_segments
 
     def to_label_colors(self, probs, cls_probs):
-        probs, cls_probs = probs.clone().detach(), cls_probs.clone().detach()
-        # n_proposals * H * W
-        proposal_masks = probs > self.bg_conf_thresh
-        # n_proposals
+        probs = probs.detach().cpu()
+        cls_probs = cls_probs.detach().cpu()
+        proposal_mask = probs > self.bg_conf_thresh
         max_cls_prob, cls_labels = cls_probs.max(-1)
-        # n_proposals * 1 * 1
-        cls_labels  = cls_labels.unsqueeze(-1).unsqueeze(-1)
-        # n_proposals * H * W
-        proposal_labels = (proposal_masks * cls_labels).long()
+        proposal_labels = (
+            proposal_mask * cls_labels.unsqueeze(-1).unsqueeze(-1)).long()
         valid_proposal = max_cls_prob > self.conf_thresh
         if valid_proposal.sum() == 0:
             valid_proposal = (max_cls_prob == max_cls_prob.max())
-        valid_probs = max_cls_prob[valid_proposal].detach()
-        # n_selected_proposals * H * W
-        proposal_labels = proposal_labels[valid_proposal].detach()
-         # H * W
-        segment_labels = torch.zeros_like(proposal_labels)[0]
+        valid_probs = max_cls_prob[valid_proposal]
+        proposal_labels = proposal_labels[valid_proposal]
+        segment_labels = torch.zeros_like(proposal_labels[0])
         for i in valid_probs.argsort():
             segment_labels = torch.where(
                 proposal_labels[i] != 0, proposal_labels[i], segment_labels)
-        segment_labels = segment_labels.detach().cpu().numpy()
+        segment_labels = segment_labels.numpy()
         # H * W * 3
         segment_label_colors = visual_utils.colorize_labels(segment_labels, self.label_colors)
         return segment_label_colors
@@ -139,7 +136,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         outputs = self(
             batch, compute_loss=True, optimizer_idx=self.val_optimizer_idx)
         loss = outputs['loss'].item()
-        if self.predictions_fstr is not None:
+        if (self.predictions_fstr is not None) and (self.max_val_viz_batch > batch_nb):
             predictions_paths = self.get_prediction_path(batch)
             fidx = sum([list(zip([i] * q.size(0), range(q.size(0)))) 
                     for i, q in enumerate(outputs['cls_prob'])], [])

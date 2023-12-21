@@ -18,7 +18,7 @@ datasets:
   #  dataset_dir: '/home/shud/video_datasets'
   #  class_keys: ['action']
 max_num_objects: 20
-min_confidence: 0.5
+min_confidence: 0.1
 bg_min_confidence: 0.5
 num_classes: 80
 skip_training: False
