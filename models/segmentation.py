@@ -106,7 +106,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         return prediction_file_paths
 
     def to_contours(self, probs, input_image=None):
-        probs = probs.clone().detach()
+        probs = probs.clone().detach().cpu()
         masks = probs.cpu().numpy() > self.bg_conf_thresh
         color_segments = visual_utils.draw_contours(masks, input_image)
         return color_segments
@@ -130,7 +130,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
         segment_labels = segment_labels.numpy()
         # H * W * 3
         segment_label_colors = visual_utils.colorize_labels(segment_labels, self.label_colors)
-        return segment_label_colors
+        return segment_label_colors, max_cls_prob.max().item()
 
     def validation_step(self, batch, batch_nb):
         outputs = self(
@@ -148,8 +148,8 @@ class SegmentationEngine(ptl.LightningModule, ABC):
                 segment_conts = self.to_contours(q, frame.detach().cpu().numpy())
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 PilImage.fromarray(segment_conts.astype('uint8')).save(save_path)
-                label_col_save_path = save_path.replace('.jpg', '_labcol.jpg')
-                segment_label_colors = self.to_label_colors(q, q_cls)
+                segment_label_colors, max_prob = self.to_label_colors(q, q_cls)
+                label_col_save_path = save_path.replace('.jpg', '_labcol%.4f.jpg' % max_prob)
                 PilImage.fromarray(
                         segment_label_colors.astype('uint8')).save(label_col_save_path)
         self.log_dict({'val_loss': loss}, batch_size=self.bsize, on_step=True, prog_bar=True)
@@ -268,8 +268,9 @@ class BaseSegmentor(SegmentationEngine):
             probabilities for each proposal mask.
         :return: Average of Huangarian cross entropy per frame.
         """
-        pairwise_loss_fn = partial(ops.pairwise_cross_entropy, ignore_indices=[0])
-        annotation_loss = hungarian.hungarian_loss(target_onehot, q_cls, pairwise_loss_fn)
+        #pairwise_loss_fn = partial(ops.pairwise_cross_entropy, ignore_indices=[0])
+        #annotation_loss = hungarian.hungarian_loss(target_onehot, q_cls, pairwise_loss_fn)
+        annotation_loss = hungarian.hungarian_loss(target_onehot, q_cls)
         return annotation_loss.mean()
 
     def forward(self, batch, compute_loss=False, optimizer_idx=0):
@@ -312,8 +313,7 @@ class BaseSegmentor(SegmentationEngine):
                 obj_labels_onehot = obj_labels_onehot.float().contiguous()
                 # n_frames * n_proposal * (HW + n_classes)
                 flatten_obj_mask_onehot = obj_mask_onehot.view(*obj_mask_onehot.size()[:-2], -1)
-                ext_obj_labels_onehot = torch.concat(
-                    [obj_labels_onehot, flatten_obj_mask_onehot], dim=-1)
+                ext_obj_labels_onehot = torch.concat([obj_labels_onehot, flatten_obj_mask_onehot], dim=-1)
                 flatten_q_iv = q[iv].view(*q[iv].size()[:-2], -1)
                 ext_q_cls_iv = torch.concat([q_cls[iv], flatten_q_iv], dim=-1)
                 loss += self.custom_annotation_loss(ext_obj_labels_onehot, ext_q_cls_iv)
