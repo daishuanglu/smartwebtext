@@ -14,16 +14,6 @@ from utils import color_utils, image_utils, data_utils, visual_utils
 from modules import pspnet, pix2pix, losses, ops, hungarian
 
 
-def flatten_list(nested_list):
-    flattened_list = []
-    for sublist in nested_list:
-        if isinstance(sublist, list):
-            flattened_list.extend(flatten_list(sublist))
-        else:
-            flattened_list.append(sublist)
-    return flattened_list
-
-
 def pad_or_crop_obj_mask(mask, num_of_objects):
     padding_size = max(0, num_of_objects - mask.shape[0])
     return torch.nn.functional.pad(mask, (0, 0, 0, 0, 0, padding_size))[:num_of_objects]
@@ -105,28 +95,38 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             prediction_file_paths.append(epoch_pred_fstr.format(**fvals))
         return prediction_file_paths
 
-    def to_contours(self, probs, input_image=None):
-        probs = probs.clone().detach().cpu()
-        masks = probs.cpu().numpy() > self.bg_conf_thresh
+    def to_contours(self, prob, input_image=None, **kwargs):
+        prob = prob.clone().detach().cpu()
+        masks = prob.cpu().numpy() > self.bg_conf_thresh
         color_segments = visual_utils.draw_contours(masks, input_image)
         return color_segments
 
-    def to_label_colors(self, probs, cls_probs):
-        probs = probs.detach().cpu()
-        cls_probs = cls_probs.detach().cpu()
-        proposal_mask = probs > self.bg_conf_thresh
-        max_cls_prob, cls_labels = cls_probs.max(-1)
+    def to_label_colors(self, prob, cls_prob, **kwargs):
+        """
+        Transform a single image proposal masks and classes into color map.
+        :param probs: (torch.tensor) n_proposals * H * W.
+        :param cls_probs: (torch.tensor) n_proposals * n_classes.
+        :return: (numpy.array) H * W * 3. A color image.
+        """
+        prob = prob.detach().cpu()
+        cls_prob = cls_prob.detach().cpu()
+        proposal_mask = prob > self.bg_conf_thresh
+        max_cls_prob, cls_labels = cls_prob.max(-1)
         proposal_labels = (
             proposal_mask * cls_labels.unsqueeze(-1).unsqueeze(-1)).long()
-        valid_proposal = max_cls_prob > self.conf_thresh
+        # Note: Here we assume the zero dimension of the class is always background class.
+        # The not background class is the probability that the proposal mask contains an object.
+        valid_proposal = 1 - cls_prob[:, 0] > self.conf_thresh
         if valid_proposal.sum() == 0:
             valid_proposal = (max_cls_prob == max_cls_prob.max())
         valid_probs = max_cls_prob[valid_proposal]
         proposal_labels = proposal_labels[valid_proposal]
+        #proposal_mask = proposal_mask[valid_proposal]
         segment_labels = torch.zeros_like(proposal_labels[0])
         for i in valid_probs.argsort():
             segment_labels = torch.where(
                 proposal_labels[i] != 0, proposal_labels[i], segment_labels)
+            #segment_labels[proposal_mask[i]] = proposal_labels[i][proposal_mask[i]]
         segment_labels = segment_labels.numpy()
         # H * W * 3
         segment_label_colors = visual_utils.colorize_labels(segment_labels, self.label_colors)
@@ -140,7 +140,7 @@ class SegmentationEngine(ptl.LightningModule, ABC):
             predictions_paths = self.get_prediction_path(batch)
             fidx = sum([list(zip([i] * q.size(0), range(q.size(0)))) 
                     for i, q in enumerate(outputs['cls_prob'])], [])
-            for i, frame in enumerate(flatten_list(batch['frames'])):
+            for i, frame in enumerate(ops.flatten_list(batch['frames'])):
                 save_path = predictions_paths[i]
                 iv, ind = fidx[i]
                 q = outputs['prob'][iv][ind]
@@ -157,15 +157,6 @@ class SegmentationEngine(ptl.LightningModule, ABC):
 
     def configure_optimizers(self):
         return [torch.optim.AdamW(params=self.parameters(), lr=self.lr)], []
-
-    def segments(self, list_of_images: List[np.array]):
-        self.eval()
-        batch = {'frames': [torch.from_numpy(img).to(device) for img in list_of_images]}
-        outputs, _ = self(batch)
-        conts = []
-        for output, img, in zip(outputs, list_of_images):
-            conts.append(self.to_contours(output['prob'], img.detach().cpu().numpy()))
-        return conts.astype('uint8'), outputs
 
 
 class BaseSegmentor(SegmentationEngine):
@@ -185,10 +176,13 @@ class BaseSegmentor(SegmentationEngine):
         self.build_network()
         self.val_optimizer_idx = 0
         self.nll = torch.nn.NLLLoss()
-        self.dice = losses.DiceLoss()
+        self.multi_ops = ops.MultiSplitPairwiseOps(
+            segment_ops=[ops.pairwise_cross_entropy, ops.pairwise_bce, ops.pairwise_mask_iou_dice],
+            dimension_split_ids=[self.n_classes, self.n_classes + 1],
+            weights=[0.1, 1.0, 1.0])
         # Focal loss shows some NaN loss values.
-        self.focal = losses.FocalLossV1(**self.config['focal_loss'])
         self.label_colors = color_utils.generate_colors(self.n_classes)
+        self.hung_max_iter = self.config.get('hungarian_max_iterations', 0)
 
     def build_network(self):
         #self.gen = pspnet.build_network(**self.config['pspnet'])
@@ -208,7 +202,7 @@ class BaseSegmentor(SegmentationEngine):
         return [opt], []
 
     def forward_resizes(self, batch, n_frames_sizes):
-        xs = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
+        xs = [f.permute(2, 0, 1) / 255.0 for f in ops.flatten_list(batch['frames'])]
         xs = [pspnet.resnet_preprocess(x) for x in xs]
         xs = torch.stack(xs)
         if self.backbone is not None:
@@ -227,7 +221,7 @@ class BaseSegmentor(SegmentationEngine):
         return output_logits, output_cls_logits
 
     def forward_patches(self, batch, n_frames_sizes):
-        xs = [f.permute(2, 0, 1) / 255.0 for f in flatten_list(batch['frames'])]
+        xs = [f.permute(2, 0, 1) / 255.0 for f in ops.flatten_list(batch['frames'])]
         x_patches, x_coords = image_utils.image_tensors_to_patches(xs, self.config['patch_size'])
         x_patches = x_patches.to(device).float()
         if self.backbone is not None:
@@ -268,9 +262,8 @@ class BaseSegmentor(SegmentationEngine):
             probabilities for each proposal mask.
         :return: Average of Huangarian cross entropy per frame.
         """
-        #pairwise_loss_fn = partial(ops.pairwise_cross_entropy, ignore_indices=[0])
-        #annotation_loss = hungarian.hungarian_loss(target_onehot, q_cls, pairwise_loss_fn)
-        annotation_loss = hungarian.hungarian_loss(target_onehot, q_cls)
+        #annotation_loss = hungarian.hungarian_loss(target_onehot, q_cls, ops.pairwise_bce)
+        annotation_loss = hungarian.hungarian_loss(target_onehot, q_cls, self.multi_ops)
         return annotation_loss.mean()
 
     def forward(self, batch, compute_loss=False, optimizer_idx=0):
@@ -294,7 +287,7 @@ class BaseSegmentor(SegmentationEngine):
                     for mask in batch_gt['obj_mask'][iv]]
                 obj_mask_onehot = torch.stack(gt_obj_masks).float().contiguous()
                 # This only applies on background label is assumed to be 0 dim.
-                loss += self.custom_obj_loss(obj_mask_onehot, q[iv])
+                #loss += self.custom_obj_loss(obj_mask_onehot, q[iv])
                 # n_frames * H * W
                 label_masks = torch.stack(batch_gt['label_mask'][iv])
                 # n_frames * n_proposal * H * W
@@ -311,11 +304,21 @@ class BaseSegmentor(SegmentationEngine):
                 obj_labels_onehot = torch.nn.functional.one_hot(
                     obj_labels.long(), num_classes=self.n_classes)
                 obj_labels_onehot = obj_labels_onehot.float().contiguous()
-                # n_frames * n_proposal * (HW + n_classes)
+                # n_frames * n_proposal. The onehot slice zero = 1 denotes background class.
+                obj_onehot = 1 - ops.tensor_slice(obj_labels_onehot, -1, slice_id=0)
+                # n_frames * n_proposal * 1
+                obj_onehot = obj_onehot.unsqueeze(-1)
+                # n_frames * n_proposal * HW
                 flatten_obj_mask_onehot = obj_mask_onehot.view(*obj_mask_onehot.size()[:-2], -1)
-                ext_obj_labels_onehot = torch.concat([obj_labels_onehot, flatten_obj_mask_onehot], dim=-1)
+                # n_frames * n_proposal * (HW + 1 + n_classes)
+                ext_obj_labels_onehot = torch.concat(
+                    [obj_labels_onehot, obj_onehot, flatten_obj_mask_onehot], dim=-1)
+                # n_frames * n_proposal * HW
                 flatten_q_iv = q[iv].view(*q[iv].size()[:-2], -1)
-                ext_q_cls_iv = torch.concat([q_cls[iv], flatten_q_iv], dim=-1)
+                q_obj = 1 - ops.tensor_slice(q_cls[iv], -1, slice_id=0)
+                q_obj = q_obj.unsqueeze(-1)
+                # n_frames * n_proposal * (HW + 1 + n_classes)
+                ext_q_cls_iv = torch.concat([q_cls[iv], q_obj, flatten_q_iv], dim=-1)
                 loss += self.custom_annotation_loss(ext_obj_labels_onehot, ext_q_cls_iv)
                 #loss += self.custom_annotation_loss(obj_labels_onehot, q_cls[iv])
             loss /= len(n_frames_sizes)

@@ -1,8 +1,28 @@
 """A collection of supporting operations."""
+from typing import Any, Dict, List
 import torch
 
 #TF_FLOAT32_MAX = 3.4028235e+38
 TF_FLOAT32_MAX = 1e38
+
+
+def tensor_slice(tensor, dim_id, slice_id):
+    ndim = tensor.dim()
+    slice_obj = [slice_id if (i == dim_id) or ((dim_id + ndim) == i) else slice(None) 
+                 for i in range(ndim)]
+    result_tensor = tensor[slice_obj]
+    return result_tensor
+
+
+def flatten_list(nested_list):
+    flattened_list = []
+    for sublist in nested_list:
+        if isinstance(sublist, list):
+            flattened_list.extend(flatten_list(sublist))
+        else:
+            flattened_list.append(sublist)
+    return flattened_list
+
 
 def count_zeros_in_rows(zeros_mask: torch.Tensor) -> torch.Tensor:
     """
@@ -262,10 +282,13 @@ def pairwise_mask_iou(mask1, mask2, smooth=1e-10) -> torch.Tensor:
     Outputs:
     ret: NxM torch.float32. Consists of [0 - 1]
     """
-    N, H, W = mask1.shape
-    M, H, W = mask2.shape
-    mask1 = mask1.view(N, H*W)
-    mask2 = mask2.view(M, H*W)
+    #N, H, W = mask1.shape
+    #M, H, W = mask2.shape
+    N, M = mask1.shape[0], mask2.shape[0]
+    #mask1 = mask1.view(N, H*W)
+    #mask2 = mask2.view(M, H*W)
+    mask1 = mask1.view(N, -1)
+    mask2 = mask2.view(M, -1)
     intersection = torch.matmul(mask1, mask2.t())
     area1 = mask1.sum(dim=1).view(1, -1)
     area2 = mask2.sum(dim=1).view(1, -1)
@@ -287,7 +310,7 @@ def pairwise_mask_iou_dice(mask1, mask2, smooth=1e-8) -> torch.Tensor:
     return ret
 
 
-def pairwise_bce(p, q, smooth=1e-8) -> torch.Tensor:
+def pairwise_bce(p, q, smooth=1e-10) -> torch.Tensor:
     """
     Inputs:
     p: MxHxW torch.float32. Consists of [0, 1]
@@ -295,19 +318,28 @@ def pairwise_bce(p, q, smooth=1e-8) -> torch.Tensor:
     Outputs:
     ret: NxM torch.float32. Consists of [0 - 1]
     """
-    N, H, W = q.shape
-    M, H, W = p.shape
-    q_flat = q.view(N, H * W)
-    p_flat = p.view(M, H * W)
-    log_q_flat = torch.log(q_flat)
-    log_q_neg_flat = torch.log(1 - q_flat)
+    #N, H, W = q.shape
+    #M, H, W = p.shape
+    N = q.shape[0]
+    M = p.shape[0]
+    #q_flat = q.view(N, H * W)
+    #p_flat = p.view(M, H * W)
+    q_flat = q.view(N, -1)
+    p_flat = p.view(M, -1)
+    #q_flat[q_flat == 0] = smooth
+    #q_flat[q_flat == 1] = 1 - smooth
+    q_flat_smoothed_0 = torch.where(q_flat == 0, smooth, q_flat)
+    q_flat_smoothed = torch.where(q_flat_smoothed_0 == 1, smooth, q_flat_smoothed_0)
+    log_q_flat = torch.log(q_flat_smoothed)
+    log_q_neg_flat = torch.log(1 - q_flat_smoothed)
     ent = - (torch.matmul(log_q_flat, p_flat.t())
              + torch.matmul(log_q_neg_flat, 1 - p_flat.t()))
-    ent /= (H * W)
+    #ent /= (H * W)
+    ent /= q_flat.shape[1]
     return ent
 
 
-def pairwise_cross_entropy(p, q, ignore_indices=[]) -> torch.Tensor:
+def pairwise_cross_entropy(p, q, ignore_indices=[], smooth=1e-10) -> torch.Tensor:
     """
     Inputs:
     p: M * n_classes torch.float32. Consists of [0, 1]
@@ -318,13 +350,47 @@ def pairwise_cross_entropy(p, q, ignore_indices=[]) -> torch.Tensor:
     n_cls = p.shape[-1]
     p = p.view(-1, n_cls)
     q = q.view(-1, n_cls)
-    log_q = torch.log(q)
+    q_smoothed = torch.where(q == 0, smooth, q)
+    #(q.clone() == 0) * smooth
+    log_q = torch.log(q_smoothed)
     p_ignored = p.clone()
     if len(ignore_indices) > 0:
         p_ignored[:, ignore_indices] = 0.0
     ent = - torch.matmul(log_q, p_ignored.t())
     ent /= (n_cls - len(ignore_indices))
     return ent
+
+
+class MultiSplitPairwiseOps(torch.nn.Module):
+
+    def __init__(self, 
+                 segment_ops: List[Any] = [], 
+                 dimension_split_ids: List[int] = [],
+                 weights=[]):
+        super(MultiSplitPairwiseOps, self).__init__()
+        self._ops = segment_ops
+        self.dim_split_ids = dimension_split_ids
+        assert len(segment_ops) == (len(dimension_split_ids) + 1), \
+            '{:d} splits cannot be used for {:d} ops.'.format(
+                len(dimension_split_ids), len(segment_ops))
+        self.dim_split_ids.append(-1)
+        self.weights = weights
+
+    def __call__(self, x: torch.tensor, y: torch.tensor) -> Any:
+        assert x.ndim > 1, 'Input tensor must be more than 1 dimension.'
+        x = x.view(x.shape[0], -1)
+        y = y.view(y.shape[0], -1)
+        result = 0.0
+        i_cur = 0
+        for i in range(len(self._ops)):
+            x_segment = x[:, i_cur: self.dim_split_ids[i]]
+            y_segment = y[:, i_cur: self.dim_split_ids[i]]
+            r = self._ops[i](x_segment, y_segment)
+            if self.weights:
+                r *= self.weights[i]
+            result += r
+            i_cur = self.dim_split_ids[i]
+        return result
 
 
 if __name__ == '__main__':
@@ -350,3 +416,17 @@ if __name__ == '__main__':
     print(expand_item_mask(row_mask))
     col_mask = torch.tensor([[True, False, False]])
     print(expand_item_mask(col_mask))
+    multi_ops = MultiSplitPairwiseOps(
+        dimension_split_ids=[5],
+        segment_ops=[pairwise_mask_iou, pairwise_cross_entropy],
+        weights=[])
+    x = torch.tensor([
+        [0.3, 0.2, 0.1, 0.8, 0.9, 0, 0, 0, 0, 1],
+        [0.3, 0.1, 0.9, 0.2, 0.9, 0, 0, 1, 0, 0],
+        ]).float()
+    y = torch.tensor([
+        [0, 0, 1, 0, 1, 0, 0, 1, 0, 0],
+        [0, 0, 1, 0, 1, 0, 0, 1, 0, 0]
+    ]).float()
+    result = multi_ops(x, y)
+    print('Multi-split Pairwise Ops result:', result)

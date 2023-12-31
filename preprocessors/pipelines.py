@@ -92,8 +92,8 @@ VID_SEG_COLS = [SAMPLE_ID_KEY,
                 LABEL_MASK_KEY,
                 ANNOTATION_PROCESSOR]
 VID_SEG_DATASET_SEP = '\t'
-UNIQUE_COLOR_ID_PATH = 'data_model/video_seg_unique_color_id_map.json'
-UNIQUE_CLS_ID_PATH = 'data_model/video_seg_unique_cls_id_map.pkl'
+UNIQUE_COLOR_ID_PATH = 'data_model/video_seg_unique_color_id_map{split}.json'
+UNIQUE_CLS_ID_PATH = 'data_model/video_seg_unique_cls_id_map{split}.pkl'
 
 
 def mixed_video_segmentation(dataset_configs):

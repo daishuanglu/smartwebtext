@@ -17,11 +17,12 @@ datasets:
   #  train_val_ratio: [0.95, 0.05]
   #  dataset_dir: '/home/shud/video_datasets'
   #  class_keys: ['action']
+hungarian_max_iterations: 100
 max_num_objects: 20
 min_confidence: 0.1
 bg_min_confidence: 0.5
 num_classes: 80
-skip_training: False
+skip_training: True
 input_size: [320, 768]
 pspnet:
   backend: "resnet50"

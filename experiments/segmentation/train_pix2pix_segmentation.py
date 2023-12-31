@@ -1,5 +1,4 @@
 import os
-import pickle
 import pandas as pd
 import torch
 from tqdm import tqdm
@@ -8,12 +7,11 @@ import pims
 from preprocessors import pipelines
 from utils import train_utils, data_utils
 from models import segmentation
-from preprocessors.video_annotation import FrameAnnotation
+from preprocessors.video_annotation import VideoMetadata
 
 
 def load_frame_images(feature_dict):
-    fids = [int(fid) for fid in feature_dict[
-        pipelines.ANNOTATED_FRAME_ID].split(pipelines.FRAME_ID_SEP)]
+    fids = [int(fid) for fid in VideoMetadata.frame_ids(feature_dict)]
     vf =feature_dict[pipelines.CLIP_PATH_KEY]
     v = pims.Video(vf)
     samples = [torch.from_numpy(v[i]) for i in fids]
@@ -22,21 +20,15 @@ def load_frame_images(feature_dict):
 
 
 def load_frame_annotation(feature_dict, unique_cls_id_map={}):
-    annotation = FrameAnnotation(
-        object_mask_key=feature_dict[pipelines.OBJECT_MASK_KEY], 
-        label_mask_key=feature_dict[pipelines.LABEL_MASK_KEY], 
-        ref_text_key=feature_dict[pipelines.REF_TEXT_KEY],
-        processor=feature_dict[pipelines.ANNOTATION_PROCESSOR],
-        unique_cls_id_map=unique_cls_id_map[feature_dict[pipelines.DATASET_KEY]])
     obj_masks = []
     label_masks = []
     ref_texts = []
-    annotation_paths = feature_dict[pipelines.ANNOTATED_FRAME_PATH].split(pipelines.FRAME_ID_SEP)
-    for annotation_path in annotation_paths:
-        annotation(annotation_path)
-        obj_masks.append(torch.from_numpy(annotation.context.obj_mask).long())
-        label_masks.append(torch.from_numpy(annotation.context.label_mask).long())
-        ref_texts.append(annotation.context.ref_text)
+    annotations = VideoMetadata.frame_annotations(
+        feature_dict, unique_cls_id_map[VideoMetadata.dataset_name(feature_dict)])
+    for context in annotations:
+        obj_masks.append(torch.from_numpy(context.obj_mask).long())
+        label_masks.append(torch.from_numpy(context.label_mask).long())
+        ref_texts.append(context.ref_text)
     return {'obj_mask': obj_masks, 'ref_text': ref_texts, 'label_mask': label_masks}
 
 
@@ -57,10 +49,7 @@ def main():
         pipelines.SAMPLE_ID_KEY: (lambda x: str(x)),
         pipelines.DATASET_KEY: (lambda x: str(x))
     }
-    with open(pipelines.UNIQUE_CLS_ID_PATH, 'rb') as fp:
-        unique_cls_id_map = pickle.load(fp)
-        print('Unique region class IDs map:')
-        print(unique_cls_id_map)
+    unique_cls_id_map = VideoMetadata.unique_class_id_map(split='')
     train_a2d_cols = {
         'frames': lambda x: load_frame_images(x),
         'gt_frames': lambda x: load_frame_annotation(x, unique_cls_id_map)
@@ -117,15 +106,33 @@ def main():
     df_test_meta = pd.read_csv(
         test_meta_path, sep=pipelines.VID_SEG_DATASET_SEP, dtype=str, parse_dates=False,
         na_values=[], keep_default_na=False)
-    for _, row in tqdm(df_test_meta.iterrows(), total=len(df_test_meta), desc='test video segmentation'):
-        os.makedirs(os.path.join(model_eval_dir, row[pipelines.SAMPLE_ID_KEY]), exist_ok=True)
+    n_eval_visuals = config.get('n_eval_visuals', 10)
+    i_eval = 0
+    for _, row in tqdm(df_test_meta.iterrows(), total=len(df_test_meta), desc='eval video segmentation'):
         v = pims.Video(row[pipelines.CLIP_PATH_KEY])
+        frames = []
         for fid in row[pipelines.ANNOTATED_FRAME_ID].split(pipelines.FRAME_ID_SEP):
-            output_fname = os.path.join(model_eval_dir, row[pipelines.SAMPLE_ID_KEY]+'/'+fid+'.jpg')
-            segments, _ = model.segments([v[int(fid)]])[0]
-            output_image = PilImage.fromarray(segments, mode='RGB')
-            output_image.save(output_fname)
-
+            frames.append(torch.from_numpy(v[int(fid)]).to(train_utils.device))
+        vid = VideoMetadata.video_id(row)
+        fids = VideoMetadata.frame_ids(row)
+        batch = {'frames': [frames]}
+        pred_dict = model(batch)
+        pred_dict = {k: v[0] for k, v in pred_dict.items() if v}
+        output_fname = os.path.join(model_eval_dir, vid + '.h5')
+        VideoMetadata.save_sequence_predictions(
+            pred_dict, fids, output_fname, model.bg_conf_thresh, model.conf_thresh)
+        if i_eval < n_eval_visuals:
+            os.makedirs(os.path.join(model_eval_dir, vid), exist_ok=True)
+            for i, fid in enumerate(fids):
+                output_cont_path = os.path.join(
+                    model_eval_dir, vid + '/' + fid + '_cont.jpg')
+                im_conts = model.to_contours(pred_dict['prob'][i], v[int(fid)])
+                PilImage.fromarray(im_conts, mode='RGB').save(output_cont_path)
+                output_seg_path = os.path.join(
+                    model_eval_dir, vid + '/' + fid + '_seg.jpg')
+                im_color_seg, _ = model.to_label_colors(pred_dict['prob'][i], pred_dict['cls_prob'][i])
+                PilImage.fromarray(im_color_seg.astype('uint8')).save(output_seg_path)
+        i_eval += 1
 
 if __name__ == '__main__':
     main()

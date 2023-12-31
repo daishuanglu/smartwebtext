@@ -19,7 +19,7 @@ def compute_pairwise_focal_bce(y_true, y_pred, alpha=0.5, gamma=2.0):
 
 
 def compute_euclidean_distance(
-        a: torch.tensor, b: torch.tensor):  # pylint: disable=invalid-name
+        a: torch.tensor, b: torch.tensor, w=None):  # pylint: disable=invalid-name
     """
     Computes euclidean distance between two inputs `a` and `b`.
 
@@ -46,6 +46,8 @@ def compute_euclidean_distance(
             The 2D-tensor [num_entities, num_dimesions] of floats.
         b:
             The 2D-tensor [num_entities, num_dimesions] of floats.
+        w:
+            The 2D-tensor [num_dimesions] of floats.
 
     Result:
         The 2D tensor [num_entities, num_entities] with computed
@@ -53,6 +55,10 @@ def compute_euclidean_distance(
     """
     a = a.view(a.size(0), -1)
     b = b.view(b.size(0), -1)
+    if w is not None:
+        w = w.view(w.size(0), -1).unsqueeze(0)
+        a *= w
+        b *= w
     a2 = torch.sum(a ** 2, dim=1).view(-1, 1)
     b2 = torch.sum(b ** 2, dim=1).view(1, -1)
     dist = (a2 - 2 * torch.matmul(a, b.T) + b2)
@@ -298,7 +304,7 @@ def shift_zeros(matrix, scratched_rows_mask, scratched_cols_mask):
     ]
 
 
-def reduce_matrix(matrix):
+def reduce_matrix(matrix, max_iter=0):
     """
     Reduce matrix suitable to perform the optimal assignment.
 
@@ -343,9 +349,13 @@ def reduce_matrix(matrix):
     reduced_matrix = matrix
     scratched_rows_mask = torch.zeros(num_of_rows, 1).bool().to(matrix.device)
     scratched_cols_mask = torch.zeros(1, num_of_cols).bool().to(matrix.device)
-    while is_optimal_assignment(
-            scratched_rows_mask, scratched_cols_mask).logical_not():
+    n_iter = 0
+    while is_optimal_assignment(scratched_rows_mask, scratched_cols_mask).logical_not():
         reduced_matrix, scratched_rows_mask, scratched_cols_mask = body(reduced_matrix)
+        #  Try early stop best assignment selection for hungarian loss.
+        if n_iter >= max_iter and (max_iter > 0):
+            break
+        n_iter += 1
 
     return reduced_matrix
 
@@ -433,7 +443,7 @@ def select_optimal_assignment_mask(reduced_matrix):
 
 
 def hungarian_loss(
-        y_true, y_pred, pairwise_cost_fn = compute_euclidean_distance):
+        y_true, y_pred, pairwise_cost_fn = compute_euclidean_distance, max_iter=0):
     """
     Computes the Hungarian loss between `y_true` and `y_pred`.
 
@@ -477,7 +487,7 @@ def hungarian_loss(
         # `None` dimension values.
         n = cost.shape[1]
         cost = cost.view(n, n)
-        return (cost * select_optimal_assignment_mask(reduce_matrix(cost))).mean()
+        return (cost * select_optimal_assignment_mask(reduce_matrix(cost, max_iter))).mean()
 
     losses = torch.zeros(y_true.shape[0]).to(y_true.device)
     # loop over batch elements pairs

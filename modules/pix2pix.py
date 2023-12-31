@@ -131,8 +131,10 @@ class Generator(nn.Module):
         x = self.output(torch.cat((x, encoder_outputs.pop()), dim=1))
         # batch_size * n_proposal * n_classes * H * W
         x = x.view(-1, self.out_channels, self.n_aux_classes, *x.size()[-2:])
+        #x_cls = x.mean(dim=(-2, -1))
         x_cls = x.max(dim=-1).values.max(dim=-1).values
-        return x.max(dim=2).values, x_cls
+        return x.mean(dim=2), x_cls
+        #return x.max(dim=2).values, x_cls
 
 
 def interpolate_groups(g, ratio, mode, align_corners):
