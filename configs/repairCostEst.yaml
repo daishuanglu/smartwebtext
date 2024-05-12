@@ -1,0 +1,43 @@
+learning_rate: 0.0001
+batch_size: 4
+embed_size: 768
+epochs: 50
+monitor: 'val_loss'
+model_name: 'rc_est_v1'
+#resume_ckpt: 'trainer_log/rc_est_v1-epoch03-val_loss5.107658.ckpt'
+train_data_path: 'data/sythetic_train.csv'
+val_data_path: 'data/sythetic_val.csv'
+test_data_path:  'data/sythetic_test.csv'
+limit: 1000
+items:
+  #- ["ClaimID", "cat"]
+  - ["ClaimDate", "cat"]
+  - ["CausalIssue", "cat"]
+  - ["VehicleID", "cat"]
+  - ["CustomerComplaint", "text"]
+  - ["TechnicianDiagnosis", "text"]
+  
+queries:
+  - ["RepairRecommendation", "text"]
+
+cat:
+  n_cats: 10000
+  embed_size: 768
+  do_hash: True
+
+text:
+  max_input_length: 64
+  embed_size: 768
+heads: 
+  CasualCode: 
+    hidden_size: 64
+    num_classes: 21
+    loss_weight: 1.0
+  PartCostsBucket:
+    hidden_size: 64
+    num_classes: 4
+    loss_weight: 1.0
+  LaborHoursBucket:
+    hidden_size: 64
+    num_classes: 4
+    loss_weight: 1.0

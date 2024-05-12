@@ -1,0 +1,12 @@
+train_data_path: 'data/BELKA/train.csv'
+val_data_path: 'data/BELKA/val.csv'
+test_data_path: 'data/BELKA/test.csv'
+learning_rate: 0.0001
+batch_size: 4
+embed_size: 768
+epochs: 50
+monitor: 'val_loss'
+model_name: 'belka_v1'
+max_input_length: 128
+resume_ckpt: ''
+limit: 1000
