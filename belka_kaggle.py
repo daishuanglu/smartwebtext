@@ -82,9 +82,10 @@ class BelkaModel(ptl.LightningModule):
     def train_or_val_step(self, batch, training):
         scores = self.forward(batch)
         loss_type = 'train' if training else 'val'
-        target = torch.tensor(batch['binds']).to(DEVICE)
-        weights = (target == 0) * 0.5 + (target == 1) * 99.5
-        loss = torch.mean(weights * ((scores - target) ** 2))
+        target = torch.tensor(batch['binds']).to(DEVICE).clone().detach()
+        #weights = (target == 0) * 0.5 + (target == 1) * 99.5
+        #loss = torch.mean(weights * ((scores - target) ** 2))
+        loss = self.loss_fn(scores, target)
         log = {f'{loss_type}_loss': loss.item()}
         self.log_dict(log, batch_size=self.config['batch_size'], on_step=True, prog_bar=True)
         return loss
@@ -98,7 +99,7 @@ def read_config(config_file):
 
 if __name__ == '__main__':
     config = read_config('configs/belka.yaml')
-    cnt = {'1': 0, '0': 0}
+    #cnt = {'1': 0, '0': 0}
     #with open(config['train_data_path'], 'r') as f:
     #    next(f)
     #    for line in tqdm(f, total=300000000):
