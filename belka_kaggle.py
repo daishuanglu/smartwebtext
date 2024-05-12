@@ -31,7 +31,7 @@ FEATURES = ['buildingblock1_smiles',
 train_cols = {
     'text': lambda x: '[SEP]'.join([x[feat] for feat in FEATURES])
     }
-OUTPUT_PATH = 'belka_test_predictions'
+OUTPUT_PATH = 'belka_test_predictions.csv'
 BERT_MODEL = 'distilbert-base-uncased'
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -158,6 +158,6 @@ if __name__ == '__main__':
         outputs = model(batch)
         results['id'] += batch['id']
         scores = model(batch)
-        scores = scores.cpu().numpy().tolist()
+        scores = scores.detach().cpu().numpy().tolist()
         results['binds'] += scores
     pd.DataFrame(results).set_index('id').to_csv(OUTPUT_PATH)
