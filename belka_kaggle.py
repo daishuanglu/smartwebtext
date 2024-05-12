@@ -67,7 +67,7 @@ class BelkaModel(ptl.LightningModule):
         outputs = self.text_transformer(**inputs)
         enc = mean_pooling(outputs['last_hidden_state'], inputs['attention_mask'])
         score = self.linear(enc)
-        return torch.sigmoid(score)
+        return torch.sigmoid(score).squeeze(-1)
 
     def configure_optimizers(self):
         return [torch.optim.AdamW(
