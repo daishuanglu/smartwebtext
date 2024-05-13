@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 
 def main():
-    config = train_utils.read_config("config/prnews_tte_sent_small.yaml")
+    config = train_utils.read_config("experiments/news_topic/configs/prnews_tte_sent_small.yaml")
     if not config.get("skip_prep_data", False):
         pipelines.prnews(
             output_files=[config['train_data_path'], config['val_data_path']],
