@@ -10,7 +10,7 @@ from evaluators.prnews import assets
 OUTPUT_DIR = 'evaluation/prnews/tte_embedding_projection'
 
 
-if __name__ == '__main__':
+def main():
     config = train_utils.read_config("experiments/news_topic/configs/prnews_tte_sent_small.yaml")
     if not config.get("skip_prep_data", False):
         pipelines.prnews(
@@ -30,10 +30,13 @@ if __name__ == '__main__':
     for name, idx in ref_vocab.items():
         all_companies[idx] = name
     company_embeddings = model_obj.item_embedding.data.weights
-    visual_utils.tensorboard_text_embedding(
+    visual_utils.tensorboard_text_embedding_v2(
         os.path.join(OUTPUT_DIR, 'companies'), all_companies, company_embeddings)
     news_embeddings = model_obj.query_model({
         config['ref_col']: assets.TEST_NEWS_QUERIES})
     visual_utils.tensorboard_text_embedding(
         os.path.join(OUTPUT_DIR, 'news'), assets.TEST_NEWS_QUERIES, news_embeddings)
-    
+
+
+if __name__ == '__main__':
+    main()

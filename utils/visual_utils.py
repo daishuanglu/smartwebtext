@@ -1,7 +1,11 @@
 import os
 import cv2
 import tensorflow as tf
+import tensorflow as tf
+import tensorboard as tb
 from tensorboard.plugins import projector
+
+from torch.utils.tensorboard import SummaryWriter
 
 import numpy as np
 from itertools import cycle
@@ -151,25 +155,24 @@ def overlay(image, mask, colors=[255,0,0], cscale=2,alpha=0.4):
   return im_overlay.astype(image.dtype)
 
 
-def tensorboard_text_embedding(log_dir, words, embedding_vectors):
+def tensorboard_text_embedding(log_dir, metadata, embedding_vectors):
     # Generate files to display in embedding projector https://projector.tensorflow.org/
     # Set up a logs directory, so Tensorboard knows where to look for files.
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
+    with open(os.path.join(log_dir, 'metadata.tsv'), 'w') as f:
+        for label in metadata:
+            f.write(label + '\n')
+    embedding_var = tf.Variable(embedding_vectors, name='embedding')
+    checkpoint = tf.train.Checkpoint(embedding=embedding_var)
+    checkpoint.save(log_dir + '/embeddings.ckpt')
 
-    # Save Labels separately on a line-by-line manner.
-    with open(os.path.join(log_dir, 'metadata.tsv'), "w") as f:
-        for word in words:
-            f.write("{}\n".format(word))
-    checkpoint = tf.train.Checkpoint(embedding=embedding_vectors)
-    checkpoint.save(os.path.join(log_dir, "embedding.ckpt"))
-
-    # Set up config.
+    # Set up the projector
     config = projector.ProjectorConfig()
     embedding = config.embeddings.add()
     # The name of the tensor will be suffixed by `/.ATTRIBUTES/VARIABLE_VALUE`.
-    embedding.tensor_name = "embedding/.ATTRIBUTES/VARIABLE_VALUE"
-    embedding.metadata_path = 'metadata.tsv'
+    embedding.tensor_name = embedding_var.name + "/.ATTRIBUTES/VARIABLE_VALUE"
+    embedding.metadata_path = os.path.join(log_dir, 'metadata.tsv') 
     projector.visualize_embeddings(log_dir, config)
 
 
