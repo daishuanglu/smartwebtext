@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eux
 fdir=${2:-"smartwebtext"}
-IP="192.168.0.26"
+IP="192.168.0.28"
 a="code"
 b="prnews"
 c="fasttext"
@@ -34,18 +34,14 @@ then
   scp -r scrappers shud@$IP:/home/shud/$fdir
   scp -r utils shud@$IP:/home/shud/$fdir
   scp -r models shud@$IP:/home/shud/$fdir
+  scp -r modules shud@$IP:/home/shud/$fdir
   scp -r preprocessors shud@$IP:/home/shud/$fdir
   scp -r experiments shud@$IP:/home/shud/$fdir
   scp -r evaluators shud@$IP:/home/shud/$fdir
   scp requirements.txt shud@$IP:/home/shud/$fdir
   scp -r env*.sh shud@$IP:/home/shud/$fdir
-  scp -r config shud@$IP:/home/shud/$fdir
   scp -r svo shud@$IP:/home/shud/$fdir
-  #scp -r evaluation shuangludai@$IP:/home/shuangludai/$fdir
-  scp -r professional shud@$IP:/home/shud/$fdir
   scp -r sw_tools shud@$IP:/home/shud/$fdir
-  scp -r modules shud@$IP:/home/shud/$fdir
-  scp -r thin_plate_spline_motion_model shud@$IP:/home/shud/$fdir
   scp env_setup.sh shud@$IP:/home/shud/$fdir
 fi
 if [ $1 == $b ]

@@ -8,7 +8,7 @@ text_col: "Text"
 ref_col: "Company"
 limit:
 
-skip_training: True
+skip_training: False
 clear_cache: True
 bert_model_name: 'distilbert-base-uncased'
 ref_emb_size: 256
@@ -24,5 +24,5 @@ max_doc_length: 512
 max_ref_length: 32
 
 epochs: 50
-resume_ckpt: True
+resume_ckpt:
 monitor: 'val_perp'

@@ -1,10 +1,13 @@
+import os
 import json
 
 from models import topic_embedding
-from utils import train_utils
+from utils import train_utils, visual_utils
 from preprocessors import pipelines
+from evaluators.prnews import assets
 
 
+OUTPUT_DIR = 'evaluation/prnews/local_topic_embedding_projection'
 TTE_ITEM_VOCAB_PATH = ''
 
 
@@ -36,9 +39,9 @@ def main():
     for name, idx in ref_vocab.items():
         all_companies[idx] = name
     company_embeddings = ref_emb
-    # Press news query embeddings.
-    news_embeddings = model_obj.embedding(
-        sentences=['sentence1', 'sentence2', 'sentence3'],
-        refs=['company1'])
-    
+    visual_utils.tensorboard_text_embedding(
+        os.path.join(OUTPUT_DIR, 'companies'), all_companies, company_embeddings)
+    news_embeddings = model_obj.embedding(sentences=assets.TEST_NEWS_QUERIES, refs=['x'])
+    visual_utils.tensorboard_text_embedding(
+        os.path.join(OUTPUT_DIR, 'news'), assets.TEST_NEWS_QUERIES, news_embeddings)
     

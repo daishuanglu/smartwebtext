@@ -154,7 +154,6 @@ def overlay(image, mask, colors=[255,0,0], cscale=2,alpha=0.4):
 def tensorboard_text_embedding(log_dir, words, embedding_vectors):
     # Generate files to display in embedding projector https://projector.tensorflow.org/
     # Set up a logs directory, so Tensorboard knows where to look for files.
-    log_dir='/logs/imdb-example/'
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 

@@ -9,7 +9,8 @@ from models import topic_embedding
 
 
 def main():
-    config = train_utils.read_config("config/prnews_global_topic_emb.yaml")
+    config = train_utils.read_config(
+        "experiments/news_topic/configs/prnews_global_topic_emb.yaml")
 
     train_doc_features = {
         config['ref_col']: (lambda x: str(x)),
@@ -61,6 +62,7 @@ def main():
     os.makedirs(pipelines.PRNEWS_EVAL_DIR, exist_ok=True)
     print("generate evaluation results. ")
     model = train_utils.load(model_obj, latest_ckpt_path)
+    model.eval()
     df_val = pd.read_csv(
         config['val_data_path'],
         sep=pipelines.PRNEWS_DATA_SEP,

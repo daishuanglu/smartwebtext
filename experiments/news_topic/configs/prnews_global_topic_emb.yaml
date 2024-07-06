@@ -8,7 +8,7 @@ text_col: "Text"
 ref_col: "Company"
 limit:
 
-skip_training: True
+skip_training: False
 clear_cache: True
 bert_model_name: 'distilbert-base-uncased'
 num_inputs: 5
@@ -23,5 +23,5 @@ variance: 0.995
 max_doc_length: 512
 
 epochs: 50
-resume_ckpt: True
+resume_ckpt:
 monitor: 'val_perp'

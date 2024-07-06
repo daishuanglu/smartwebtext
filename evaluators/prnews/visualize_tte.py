@@ -1,11 +1,13 @@
+import os
 import json
-import random
 
 from models import cf
-from utils import train_utils
+from utils import train_utils, visual_utils
 from preprocessors import pipelines
+from evaluators.prnews import assets
 
-import umap
+
+OUTPUT_DIR = 'evaluation/prnews/tte_embedding_projection'
 
 
 if __name__ == '__main__':
@@ -28,17 +30,10 @@ if __name__ == '__main__':
     for name, idx in ref_vocab.items():
         all_companies[idx] = name
     company_embeddings = model_obj.item_embedding.data.weights
-    # Press news query embeddings.
+    visual_utils.tensorboard_text_embedding(
+        os.path.join(OUTPUT_DIR, 'companies'), all_companies, company_embeddings)
     news_embeddings = model_obj.query_model({
-        config['ref_col']: [
-            'query1',
-            'query2'
-            ]})
-
-    
-    embedding = umap.UMAP(n_neighbors=5,
-                      min_dist=0.3,
-                      metric='correlation').fit_transform(digits.data)
-
-
+        config['ref_col']: assets.TEST_NEWS_QUERIES})
+    visual_utils.tensorboard_text_embedding(
+        os.path.join(OUTPUT_DIR, 'news'), assets.TEST_NEWS_QUERIES, news_embeddings)
     

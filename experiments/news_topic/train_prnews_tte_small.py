@@ -69,6 +69,7 @@ def main():
     os.makedirs(pipelines.PRNEWS_EVAL_DIR, exist_ok=True)
     print("generate evaluation results. ")
     model = train_utils.load(model_obj, latest_ckpt_path)
+    model.eval()
     df_val = pd.read_csv(
         config['train_data_path'],
         sep=pipelines.PRNEWS_DATA_SEP,
