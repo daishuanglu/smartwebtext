@@ -1,4 +1,8 @@
+import os
 import cv2
+import tensorflow as tf
+from tensorboard.plugins import projector
+
 import numpy as np
 from itertools import cycle
 import skimage
@@ -146,6 +150,28 @@ def overlay(image, mask, colors=[255,0,0], cscale=2,alpha=0.4):
 
   return im_overlay.astype(image.dtype)
 
+
+def tensorboard_text_embedding(log_dir, words, embedding_vectors):
+    # Generate files to display in embedding projector https://projector.tensorflow.org/
+    # Set up a logs directory, so Tensorboard knows where to look for files.
+    log_dir='/logs/imdb-example/'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    # Save Labels separately on a line-by-line manner.
+    with open(os.path.join(log_dir, 'metadata.tsv'), "w") as f:
+        for word in words:
+            f.write("{}\n".format(word))
+    checkpoint = tf.train.Checkpoint(embedding=embedding_vectors)
+    checkpoint.save(os.path.join(log_dir, "embedding.ckpt"))
+
+    # Set up config.
+    config = projector.ProjectorConfig()
+    embedding = config.embeddings.add()
+    # The name of the tensor will be suffixed by `/.ATTRIBUTES/VARIABLE_VALUE`.
+    embedding.tensor_name = "embedding/.ATTRIBUTES/VARIABLE_VALUE"
+    embedding.metadata_path = 'metadata.tsv'
+    projector.visualize_embeddings(log_dir, config)
 
 
 if __name__ == '__main__':

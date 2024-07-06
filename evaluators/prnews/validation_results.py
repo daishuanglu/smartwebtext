@@ -4,6 +4,7 @@ from sklearn.metrics import precision_recall_curve, average_precision_score
 import matplotlib.pyplot as plt
 import os
 
+
 def flatten_cols(df_pred, df_val):
     df_val_ = df_val.copy().set_index(['Company','phrase'])
     method = list(set(col.split(':')[0] for col in df_pred.columns if (':' in col))-{'haskey'})[0]
