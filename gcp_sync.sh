@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eux
 fdir=${2:-"smartwebtext"}
-IP="34.145.45.201"
+IP="35.230.28.188"
 a="code"
 b="prnews"
 c="fasttext"
@@ -33,18 +33,14 @@ then
   scp -r scrappers shuangludai@$IP:/home/shuangludai/$fdir
   scp -r utils shuangludai@$IP:/home/shuangludai/$fdir
   scp -r models shuangludai@$IP:/home/shuangludai/$fdir
+  scp -r modules shuangludai@$IP:/home/shuangludai/$fdir
   scp -r preprocessors shuangludai@$IP:/home/shuangludai/$fdir
   scp -r experiments shuangludai@$IP:/home/shuangludai/$fdir
   scp -r evaluators shuangludai@$IP:/home/shuangludai/$fdir
   scp requirements.txt shuangludai@$IP:/home/shuangludai/$fdir
-  scp envrc.sh shuangludai@$IP:/home/shuangludai/$fdir
-  scp -r config shuangludai@$IP:/home/shuangludai/$fdir
+  scp -r env*.sh shuangludai@$IP:/home/shuangludai/$fdir
   scp -r svo shuangludai@$IP:/home/shuangludai/$fdir
-  #scp -r evaluation shuangludai@$IP:/home/shuangludai/$fdir
-  scp -r professional shuangludai@$IP:/home/shuangludai/$fdir
-  scp -r tools shuangludai@$IP:/home/shuangludai/$fdir
-  scp -r modules shuangludai@$IP:/home/shuangludai/$fdir
-  scp -r thin_plate_spline_motion_model shuangludai@$IP:/home/shuangludai/$fdir
+  scp -r sw_tools shuangludai@$IP:/home/shuangludai/$fdir
   scp env_setup.sh shuangludai@$IP:/home/shuangludai/$fdir
 fi
 if [ $1 == $b ]

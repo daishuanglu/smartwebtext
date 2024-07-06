@@ -11,7 +11,7 @@ limit:
 skip_training: False
 clear_cache: True
 bert_model_name: 'distilbert-base-uncased'
-ref_emb_size: 256
+ref_emb_size: 128
 en1_units: 128
 en2_units: 256
 num_topic: 32
