@@ -10,7 +10,7 @@ clear_cache: True
 resume_ckpt: True
 
 # CF model parameters
-skip_training: False
+skip_training: True
 monitor: "val_loss"
 score_col: "scores"
 query_col: "Text"

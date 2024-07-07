@@ -1,13 +1,13 @@
+import os
+import json
 import numpy as np
 from collections import defaultdict
-from sklearn.metrics import average_precision_score,precision_recall_curve
+from evaluators.prnews import eval_utils
 import matplotlib.pyplot as plt
-from sklearn.metrics import precision_score, recall_score
-from typing import Dict, Any
 from utils.string_utils import damerauLevenshtein
 import pandas as pd
 from tabulate import tabulate
-
+from preprocessors.pipelines import PRNEWS_EVAL_DIR
 
 f=open("evaluators/prnews/MTurk/MTurkTemplate.txt",'r')
 template=f.readlines()
@@ -145,51 +145,8 @@ def process_predictions_df(df, kws):
         results[method] = results[method].set_index('tic')
     return results
 
+
 colormaps=['orange','purple','blue','red','green','yellow','black','brown']
-
-
-def eval_plot(df_pred: Dict[str, Any], df_gt: pd.DataFrame, kword):
-    segments = {
-        'full': (lambda x: x.index!=None),
-        'haskey': (lambda x: (x['haskey:'+kword]>0)),
-        'nothaskey': (lambda x: ~(x['haskey:'+kword]>0))
-    }
-    fig, axes = plt.subplots(1, len(segments))
-
-    def _plot(ax, pred ,gt, c, l, coverage):
-        precision, recall, thresholds = precision_recall_curve(
-            gt, pred, pos_label=1)
-        recall= coverage * recall
-        map = average_precision_score(
-            gt, pred, average='micro', pos_label=1)
-        axes[i].plot(recall, precision, color=c, label=l)
-        leg = l + '- mAP:' + str(map)
-        return ax, leg
-
-    for i,(seg, ind_fn) in enumerate(segments.items()):
-        legend=[]
-        seg_ind = {}
-        for im, method in enumerate(df_pred.keys()):
-            # remove companies that do not predicted OR do not have GT labels
-            df_predict, df_gt_local = join_pred_gt(df_pred[method], df_gt)
-            #coverage = len(df_predict)/len(df_gt.drop_duplicates('tic'))
-            print("METHOD=%s, %d companies can be evaluated after dropping duplicated tic." % (method, len(df_predict)) )
-            ind = ind_fn(df_predict)
-            for ii, t in enumerate(df_predict.index):
-                seg_ind[t] = ind.tolist()[ii]
-            axes[i], leg= _plot(
-                axes[i],
-                df_predict[method+':'+kword][ind],
-                df_gt_local[kword][ind],
-                colormaps[im], method, coverage=1.0)
-            legend.append(leg)
-        axes[i].legend(legend, loc='best')
-        seg_ratio = np.mean(list(seg_ind.values()))
-        axes[i].set_title('%s:ROC - %s, ratio: %.2f' % (kword, seg, seg_ratio) )
-        axes[i].set_ylabel('precision')
-        axes[i].set_xlabel('recall')
-    #plt.show(block=True)
-    return fig, axes
 
 
 def cf_haskey(eval_data_path, context_col, ref_col, eval_refs, query_kws):
@@ -205,61 +162,6 @@ def cf_haskey(eval_data_path, context_col, ref_col, eval_refs, query_kws):
             texts = ' '.join(set(df[ind][context_col]))
             haskey['haskey:' + kw].append(kw in texts)
     return pd.DataFrame.from_dict(haskey)
-
-
-
-def score(predictions, groundtruths):
-    groundtruths = groundtruths.dropna()
-    # Find missing indices in series2 compared to series1
-    missing_indices = groundtruths.index.difference(predictions.index)
-    # Add missing indices to series2 with NaN values
-    predictions = predictions.append(pd.Series(index=missing_indices, dtype='float'))
-    predictions = predictions.loc[groundtruths.index]
-    n_samples = len(predictions)
-    print('%d/%d missing predictions.' % (predictions.isna().sum(), n_samples))
-    thresholds = np.linspace(0, 1, num=101)
-    df_prec_rec = defaultdict(list)
-    for th in thresholds:
-        df_prec_rec['precision'].append(precision_score(groundtruths == 1.0, predictions > th))
-        df_prec_rec['recall'].append(recall_score(groundtruths == 1.0, predictions > th))
-        df_prec_rec['threshold'].append(th)
-    df_prec_rec = pd.DataFrame.from_dict(df_prec_rec)
-    df_prec_rec = df_prec_rec.sort_values(by=['precision', 'recall'])
-    #idx = df_prec_rec.groupby('precision')['recall'].idxmax()
-    df_prec_rec = df_prec_rec.drop_duplicates(subset = ['recall'], keep = 'last')
-    df_prec_rec = df_prec_rec.sort_values(by='recall')
-    invalid = (df_prec_rec['precision'] == 0) & (df_prec_rec['recall'] == 0)
-    df_prec_rec = df_prec_rec[~invalid]
-    default_zero_recall = {'precision': 1.0, 'recall': 0.0, 'threshold': 1.0}
-    default_100_recall = {'precision': 0.0, 'recall': 1.0, 'threshold': -1.0}
-    df_prec_rec = pd.DataFrame(
-        [default_zero_recall], columns=df_prec_rec.columns).append(df_prec_rec, ignore_index=True)
-    df_prec_rec = df_prec_rec.append(default_100_recall, ignore_index=True)
-    return df_prec_rec
-
-
-def load_predictions_df(prediction_files, index_key, header_mappings=[]):
-    merged_data = None
-    for file, header_mapping in zip(prediction_files, header_mappings):
-        df = pd.read_csv(file, parse_dates=False, keep_default_na=False, na_values=[])
-        rename_dict = {k: v for k,v in header_mapping.items() if k in df.columns}
-        df = df.rename(rename_dict, axis=1)
-        df = df.set_index(index_key)
-        df = df[[col for col in df.columns if ':' in col]]
-        if merged_data is None:
-            merged_data = df
-        else:
-            merged_data = pd.merge(
-                merged_data, df, left_index=True, right_index=True, how='outer')
-    return merged_data
-
-
-def load_gt(pro_label_file, index_key):
-    df_gt = pd.read_csv(
-        pro_label_file, dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
-    print('%d groundtruth company labels loaded. ' % len(df_gt))
-    df_gt = df_gt.set_index(index_key)
-    return df_gt
 
 
 def load_MTurk(index_key):
@@ -298,9 +200,10 @@ if __name__=="__main__":
         {'Company':'company'}
     ]
     df_gt = load_MTurk(index_key)
-    df_predictions = load_predictions_df(prediction_files, index_key, header_mappings)
+    df_predictions = eval_utils.load_predictions_df(prediction_files, index_key, header_mappings)
     methods = sorted(set([col.split(':')[0] for col in df_predictions.columns]))
-
+    df_metrics = []
+    df_curve_metrics = []
     for kw in kws:
         fig, (ax, ax1, ax2) = plt.subplots(1, 3)
         i=0
@@ -311,9 +214,17 @@ if __name__=="__main__":
             score_col = ':'.join([method, kw])
             lengs.append(score_col)
             print(' ----------------- Threshold selector for ', score_col, ' ------------------')
-            df_prec_rec = score(df_predictions[score_col], df_gt[kw])
+            df_prec_rec = eval_utils.score(df_predictions[score_col], df_gt[kw])
             _print_df(df_prec_rec)
+            auc = eval_utils.auc_precision_recall(df_prec_rec['precision'], df_prec_rec['recall'])
+            df_curve_metrics.append(
+                {'concept': kw, 'method': method, 'nuances': 'overall', 'aupr': auc})
+            print('Area Under Curve (AUC):', auc)
             ax.plot(df_prec_rec['recall'], df_prec_rec['precision'], '.--', c=colormaps[i])
+            df_prec_rec['method'] = method
+            df_prec_rec['nuances'] = 'overall'
+            df_prec_rec['concept'] = kw
+            df_metrics.append(df_prec_rec)
             i+=1
         ax.legend(lengs, loc='best')
         ax.set_title('%s:ROC' % kw)
@@ -330,10 +241,18 @@ if __name__=="__main__":
             score_col = ':'.join([method, kw])
             lengs.append(score_col)
             print(' ----------------- haskey Threshold selector for ', score_col, ' ------------------')
-            df_prec_rec = score(df_predictions_haskey[score_col], df_gt_haskey[kw])
+            df_prec_rec = eval_utils.score(df_predictions_haskey[score_col], df_gt_haskey[kw])
             _print_df(df_prec_rec)
+            auc = eval_utils.auc_precision_recall(df_prec_rec['precision'], df_prec_rec['recall'])
+            df_curve_metrics.append(
+                {'concept': kw, 'method': method, 'nuances': 'haskey', 'aupr': auc})
+            print('Area Under Curve (AUC):', auc)
+            df_prec_rec['method'] = method
+            df_prec_rec['nuances'] = 'haskey'
+            df_prec_rec['concept'] = kw
+            df_metrics.append(df_prec_rec)
             ax1.plot(df_prec_rec['recall'], df_prec_rec['precision'], '.--', c=colormaps[i])
-            i+=1
+            i += 1
         ax1.legend(lengs, loc='best')
         ax1.set_title('%s_haskey:ROC' % kw)
         ax1.set_ylabel('precision')
@@ -348,12 +267,25 @@ if __name__=="__main__":
             score_col = ':'.join([method, kw])
             lengs.append(score_col)
             print(' ----------------- Nothaskey Threshold selector for ', score_col, ' ------------------')
-            df_prec_rec = score(df_predictions_nothaskey[score_col], df_gt_nothaskey[kw])
+            df_prec_rec = eval_utils.score(df_predictions_nothaskey[score_col], df_gt_nothaskey[kw])
             _print_df(df_prec_rec)
+            auc = eval_utils.auc_precision_recall(df_prec_rec['precision'], df_prec_rec['recall'])
+            print('Area Under Curve (AUC):', auc)
+            df_curve_metrics.append(
+                {'concept': kw, 'method': method, 'nuances': 'nothaskey', 'aupr': auc})
             ax2.plot(df_prec_rec['recall'], df_prec_rec['precision'], '.--', c=colormaps[i])
+            df_prec_rec['method'] = method
+            df_prec_rec['nuances'] = 'nothaskey'
+            df_prec_rec['concept'] = kw
+            df_metrics.append(df_prec_rec)
             i+=1
         ax2.legend(lengs, loc='best')
         ax2.set_title('%s_nothaskey:ROC' % kw)
         ax2.set_ylabel('precision')
         ax2.set_xlabel('recall')
         plt.show(block=True)
+    
+    df_metrics = pd.concat(df_metrics, ignore_index=True)
+    df_metrics.to_csv(os.path.join(PRNEWS_EVAL_DIR, 'turk_metrics.csv'))
+    pd.DataFrame(df_curve_metrics).to_csv(
+        os.path.join(PRNEWS_EVAL_DIR, 'turk_curve_metrics.csv'))

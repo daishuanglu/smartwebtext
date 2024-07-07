@@ -1,15 +1,25 @@
+import os
+import json
 from collections import defaultdict
 import random
+from tabulate import tabulate
 import pandas as pd
 from sklearn.metrics import confusion_matrix
+from evaluators.prnews import eval_utils
 from dateutil.parser import parse
 import matplotlib.pyplot as plt
-from evaluators.prnews.renderTurk import load_gt, load_predictions_df
 from utils.color_utils import PLOT_BASE_COLORS, PLOT_MARKERS
+from preprocessors.pipelines import PRNEWS_EVAL_DIR
+
 
 PRO_READ_CSV = 'evaluators/prnews/professional_reader.csv'
 METHOD_NAME_ALTERS = {'prnews_tte_sent': 'bert-context-linear-user',
                       'edit_sim': 'edit-distance'}
+
+def _print_df(df):
+    tbl = tabulate(df, headers='keys', tablefmt='psql')
+    print(tbl)
+    return
 
 
 def plot_results(df_results):
@@ -67,8 +77,8 @@ if __name__=="__main__":
         {'edit_sim:analytic': 'edit_sim:analytics', 'haskey:analytic': 'haskey:analytics'},
         {}
     ]
-    df_gt = load_gt(PRO_READ_CSV, index_key='company')
-    df_predictions = load_predictions_df(prediction_files, 'company', header_mappings)
+    df_gt = eval_utils.load_gt(PRO_READ_CSV, index_key='company')
+    df_predictions = eval_utils.load_predictions_df(prediction_files, 'company', header_mappings)
     methods = sorted(set([col.split(':')[0] for col in df_predictions.columns]))
     eval_th = 0.5
     results = defaultdict(list)
@@ -81,6 +91,7 @@ if __name__=="__main__":
             lambda x: pd.NA if x == '' else int(parse(x, fuzzy=True).year))
         df_gt_year = df_gt_kw[~df_gt_kw['start_year:%s' % kw].isna()]
         kw_counts = df_gt_year['start_year:%s' % kw].value_counts()
+        #kw_counts = pd.concat([kw_counts, pd.Series([kw_counts.sum()], index=[''])])
         for year in df_gt_year['start_year:%s' % kw].unique():
             gt_kw = df_gt_year['groundtruth:%s' % kw][df_gt_year['start_year:%s' % kw] == year]
             common_idx = gt_kw.index.intersection(df_predictions.index)
@@ -90,20 +101,71 @@ if __name__=="__main__":
                     continue
                 score_col = ':'.join([method, kw])
                 pred = df_predictions_local[score_col]
-                #is_correct = ((pred > eval_th) == gt_kw.astype(int))
-                #prec = np.mean(is_correct)
                 tn, fp, fn, tp = confusion_matrix(pred > eval_th, gt_kw.astype(int),
                                                   labels=[0, 1]).ravel()
                 prec = tp/ (tp+fp)
-                print('method={:s}, year={:d}, precision={:.4f}, thresholded_at={:.2f}'.format(
-                    method, year, prec, eval_th))
+                f_score = 2 * tp / (2 * tp + fp + fn)
+                f_score = 0.0 if pd.isna(f_score) else f_score
+                print('method={:s}, year={:s}, precision={:.4f}, thresholded_at={:.2f}, f1_score={:.4f}'.format(
+                    method, str(year), prec, eval_th, f_score))
                 results['concept'].append(kw)
                 results['method'].append(method)
                 results['count'].append(kw_counts[year] * 10 + random.randint(0, 10))
                 results['year'].append(year)
                 results['precision'].append(prec)
+                results['f1_score'].append(f_score)
                 results['thresholded_at'].append(eval_th)
     df_results = pd.DataFrame(results)
     df_results.to_csv(
-        'evaluation/prnews_accounting/year_conditioned_precisions.csv', index=False)
+        os.path.join(PRNEWS_EVAL_DIR, 'year_conditioned_precisions.csv'), index=False)
     plot_results(df_results)
+
+    df_gt = eval_utils.load_gt(PRO_READ_CSV, index_key='company')
+    df_metrics = []
+    df_curve_metrics = []
+    for kw in kws:
+        df_gt['groundtruth:%s' % kw] = pd.to_numeric(df_gt['groundtruth:%s' % kw], errors='coerce')
+        df_gt_kw = df_gt[~df_gt['groundtruth:%s' % kw].isna()]
+        df_gt_kw_haskey = df_gt_kw[df_gt_kw['haskey:%s' % kw].astype(int) == 1.0]
+        common_idx = df_gt_kw_haskey.index.intersection(df_predictions.index)
+        df_predictions_local = df_predictions.loc[common_idx].reindex(df_gt_kw_haskey.index)
+        gt_kw = df_gt_kw_haskey.loc[common_idx]['groundtruth:%s' % kw]
+        for method in methods:
+            if method in unused_methods:
+                continue
+            print(f' ---------- haskey: {method} --------')
+            score_col = ':'.join([method, kw])
+            pred = df_predictions_local[score_col]
+            df_prec_rec = eval_utils.score(pred, gt_kw)
+            _print_df(df_prec_rec)
+            df_prec_rec['method'] = method
+            df_prec_rec['nuances'] = 'haskey'
+            df_prec_rec['concept'] = kw
+            auc = eval_utils.auc_precision_recall(df_prec_rec['precision'], df_prec_rec['recall'])
+            df_curve_metrics.append({'concept': kw, 'method': method, 'nuances': 'haskey', 'aupr': auc})
+            df_metrics.append(df_prec_rec)
+        
+        df_gt_kw_nthaskey = df_gt_kw[df_gt_kw['haskey:%s' % kw].astype(int) == 0.0]
+        common_idx = df_gt_kw_nthaskey.index.intersection(df_predictions.index)
+        df_predictions_local = df_predictions.loc[common_idx].reindex(df_gt_kw_nthaskey.index)
+        gt_kw = df_gt_kw_nthaskey.loc[common_idx]['groundtruth:%s' % kw]
+        for method in methods:
+            if method in unused_methods:
+                continue
+            print(f' ---------- not haskey: {method} --------')
+            score_col = ':'.join([method, kw])
+            pred = df_predictions_local[score_col]
+            df_prec_rec = eval_utils.score(pred, gt_kw)
+            _print_df(df_prec_rec)
+            df_prec_rec['method'] = method
+            df_prec_rec['nuances'] = 'nothaskey'
+            df_prec_rec['concept'] = kw
+            auc = eval_utils.auc_precision_recall(df_prec_rec['precision'], df_prec_rec['recall'])
+            df_curve_metrics.append({'concept': kw, 'method': method, 'nuances': 'nothaskey', 'aupr': auc})
+            df_metrics.append(df_prec_rec)
+
+    df_metrics = pd.concat(df_metrics, ignore_index=True)
+    df_metrics.to_csv(
+        os.path.join(PRNEWS_EVAL_DIR, 'professional_metrics.csv'), index=False)
+    df_curve_metrics = pd.DataFrame(df_curve_metrics)
+    df_curve_metrics.to_csv(os.path.join(PRNEWS_EVAL_DIR, 'professional_curve_metrics.csv'))

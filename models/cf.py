@@ -247,7 +247,7 @@ class TTEModel(ptl.LightningModule, ABC):
         self.mse = nn.MSELoss(reduction='mean')
         self.tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         self.query_transformer = BertModel.from_pretrained(
-            bert_model_name, return_dict=True).to(device)
+            bert_model_name, return_dict=True)
         self.item_embedding = nn.Embedding(len(self.item_vocab), self.config['embed_size'])
 
     def query_model(self, batch):

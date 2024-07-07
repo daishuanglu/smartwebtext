@@ -68,31 +68,29 @@ def main():
     latest_ckpt_path = train_utils.latest_ckpt(logger_dir, config['model_name'])
     os.makedirs(pipelines.PRNEWS_EVAL_DIR, exist_ok=True)
     print("generate evaluation results. ")
-    model = train_utils.load(model_obj, latest_ckpt_path)
+    model = train_utils.load(model_obj, latest_ckpt_path).to(train_utils.device)
     model.eval()
+
     df_val = pd.read_csv(
         config['train_data_path'],
         sep=pipelines.PRNEWS_DATA_SEP,
         dtype=str, parse_dates=False, na_values=[], keep_default_na=False)
-    df_val = df_val[config['ref_col']]
-    companies = df_val.unique().tolist()
-    test_concepts = ['analytics', 'innovation', 'technology']
+    companies = df_val[config['ref_col']].unique().tolist()
+    test_keywords = ['analytics', 'innovation', 'technology']
     predictions = pd.DataFrame(
         data=[],
-        columns=[config['model_name'] + ':' + kw for kw in test_concepts],
+        columns=[config['model_name']+':'+kw for kw in test_keywords],
         index=companies)
-    for concept in test_concepts:
-        queries = pipelines.prnews_concept_examples(**config['%s_examples' % concept])
-        scores = []
-        for comp in tqdm(companies, desc=concept):
-            user_embed, item_embed = model(
-                {config['query_col']: queries, config['ref_col']: [comp]*len(queries)})
-            score = (user_embed * item_embed).sum(dim=1).detach().cpu().numpy().max()
-            scores.append((score+1)/2)
-        predictions[config['model_name'] + ':' + concept] = scores # normalize cosine score to [0,1]
+    predictions = predictions.fillna(0.0)
+    for c in tqdm(companies, desc='validation prediction %d companies' % len(companies)):
+        user_embed, item_embed = model(
+            {config['query_col']: test_keywords, config['ref_col']: [c]*len(test_keywords)})
+        scores = (user_embed * item_embed).sum(dim=1).detach().cpu().numpy()
+        predictions.loc[c] = (scores + 1) /2
     predictions.index.name = 'company'
+    print(predictions)
     predictions.to_csv(os.path.join(
         pipelines.PRNEWS_EVAL_DIR, '%s_val_predictions.csv' % config['model_name']))
-
+    
 if __name__=="__main__":
     main()
