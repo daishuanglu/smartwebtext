@@ -49,7 +49,9 @@ def main():
     company_embeddings = company_embeddings.detach().cpu().numpy()
     visual_utils.tensorboard_text_embedding(
         os.path.join(OUTPUT_DIR, 'companies'), eval_companies, company_embeddings)
-    news_embeddings = model_obj.embedding(sentences=eval_news, refs=['x'])
+    tok_ids_count = model_obj.doc_tok_ids_count(eval_news)
+    news_embeddings = model_obj.vae.en1_fc(tok_ids_count)
+    news_embeddings = news_embeddings.detach().cpu().numpy()
     visual_utils.tensorboard_text_embedding(
         os.path.join(OUTPUT_DIR, 'news'), eval_news, news_embeddings)
     

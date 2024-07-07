@@ -71,7 +71,8 @@ def main():
     test_keywords = ['analytics', 'innovation', 'technology']
     kw_embeddings = {}
     for kw in test_keywords:
-        kw_embeddings[kw] = model.embedding([kw])
+        kw_embed, _ = model.embedding([kw])
+        kw_embeddings[kw] = kw_embed.detach().cpu().numpy()
     predictions = pd.DataFrame(
         data=[],
         columns=[config['model_name']+':'+kw for kw in test_keywords],
@@ -81,7 +82,8 @@ def main():
                   desc='validation prediction %d companies' % len(companies)):
         df_val_c = df_val[df_val[config['ref_col']]==c]
         for _, row in df_val_c.iterrows():
-            prnews_emb = model.embedding([row[config['text_col']]])
+            prnews_emb, _ = model.embedding([row[config['text_col']]])
+            prnews_emb = prnews_emb.detach().cpu().numpy()
             for kw in test_keywords:
                 kw_sim = metric_utils.pw_cos_sim(kw_embeddings[kw], prnews_emb)[0,0]
                 kw_sim = (kw_sim + 1) / 2

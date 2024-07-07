@@ -1,12 +1,13 @@
 import os
 import pandas as pd
 import numpy as np
-import time
+
+from tqdm import tqdm
 from utils import ticker_utils, string_utils
 from preprocessors import pipelines
 
-COMBINED_TEXT_COL = 'Text'
-TEST_DATA_PATH = "data_model/prnews_tte_collab_filter_validation.csv"
+
+TEST_DATA_PATH = "data_model/prnews_local_topic_emb_validation.csv"
 MODE_NAME = 'val'
 
 
@@ -19,8 +20,9 @@ def get_kw_edit_sim_dataset(src_df, keywords, comp=None):
     scores=np.zeros((len(keywords),len(comp_list)))
     sentences = [['' for _ in range(len(comp_list))] for _ in range(len(keywords))]
     haskw=np.zeros((len(comp_list),len(keywords)))
-    start_time=time.time()
-    for ii,(context,company) in enumerate(zip(src_df_['Title']+' '+src_df_['Text'], src_df_['Company'])):
+    for ii,(context,company) in tqdm(enumerate(
+            zip(src_df_['Title']+' '+src_df_['Text'], src_df_['Company'])),
+            total=len(src_df_)):
         context = str(context).lower()
         ic=comp_list.index(company)
         haskw[ic,:]=np.logical_or(haskw[ic,:], [kw in context for kw in keywords])
@@ -30,8 +32,6 @@ def get_kw_edit_sim_dataset(src_df, keywords, comp=None):
             if s[j]>scores[j,ic]:
                 scores[j,ic]=s[j]
                 sentences[j][ic] = context
-        if (ii+1) % 10000 ==0:
-            print(ii+1,len(src_df_),int(time.time()-start_time),' secs.')
     df_sent = pd.DataFrame(sentences, index=['edit_sim_sent:'+w for w in keywords]).T
     df = pd.DataFrame(scores.transpose(),columns=['edit_sim:'+k for k in keywords])
     df = pd.concat([df, df_sent], axis=1)

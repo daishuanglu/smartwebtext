@@ -1,4 +1,4 @@
-from fastDamerauLevenshtein import damerauLevenshtein
+from utils.string_utils import damerauLevenshtein
 import pandas as pd
 import re
 

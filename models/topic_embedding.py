@@ -216,6 +216,14 @@ class CondProdLDA(nn.Module):
         else:
             return loss
 
+    def posterior_mean_var(self, input):
+        en1 = F.softplus(self.en1_fc(input))                            # en1_fc   output
+        en2 = F.softplus(self.en2_fc(en1))                              # encoder2 output
+        posterior_mean   = self.mean_bn(self.mean_fc(en2))          # posterior mean
+        posterior_logvar = self.logvar_bn(self.logvar_fc(en2))          # posterior log variance
+        posterior_var    = posterior_logvar.exp()
+        return posterior_mean, posterior_var
+
 
 def mean_pooling(token_embeddings, attention_mask):
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
@@ -245,22 +253,23 @@ class LocalTopicAsEmbedding(ptl.LightningModule, ABC):
         masked_tok_count = torch.sum(tok_ids_one_hot * attn_mask, dim=1).float()
         return masked_tok_count.to(train_utils.device)
 
-    def embedding(self, sentences, refs):
-        self.eval()
-        _, z = self({
-            self.config['text_col']: sentences,
-            self.config['ref_col']: refs
-        }, compute_loss=False)
-        return z.detach().cpu().numpy()
+    def embedding(self, sentences):
+        tok_ids_count = self.doc_tok_ids_count(sentences)
+        z_mean, z_var = self.vae.posterior_mean_var(tok_ids_count)
+        return z_mean, z_var
 
-    def forward(self, batch, compute_loss=False, avg_loss=True):
+    def ref_embedding(self, refs):
         ref_tok = self.tokenizer(
-            batch[self.config['ref_col']],
+            refs,
             return_tensors='pt',
             padding=True, truncation=True,
             max_length=self.config['max_ref_length'])
         ref_emb = self.cond_var_embedding(ref_tok['input_ids'].to(train_utils.device))
         ref_emb = mean_pooling(ref_emb, ref_tok['attention_mask'].to(train_utils.device))
+        return self.vae.cond_factor(ref_emb)
+
+    def forward(self, batch, compute_loss=False, avg_loss=True):
+        ref_emb = self.ref_embedding(batch[self.config['ref_col']])
         tok_ids_count = self.doc_tok_ids_count(batch[self.config['text_col']])
         return self.vae(tok_ids_count, ref_emb, compute_loss, avg_loss)
 

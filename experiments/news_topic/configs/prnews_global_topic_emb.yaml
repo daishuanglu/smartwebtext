@@ -15,7 +15,7 @@ num_inputs: 5
 en1_units: 128
 en2_units: 256
 num_topic: 32
-batch_size: 32
+batch_size: 32  # Fit to a single 16GB GPU
 learning_rate: 0.001
 momentum: 0.99
 init_mult: 1.0
@@ -25,3 +25,21 @@ max_doc_length: 512
 epochs: 50
 resume_ckpt:
 monitor: 'val_perp'
+
+analytics_examples:
+  fpath: 'evaluators/prnews/analytics.csv'
+  text_col: 'example_sent:analytics'
+  ref_col: "company"
+  sep: ','
+
+innovation_examples:
+  fpath: 'evaluators/prnews/innovation.csv'
+  text_col: 'example_sent:innovation'
+  ref_col: "company"
+  sep: ','
+
+technology_examples:
+  fpath: 'evaluators/prnews/technology.csv'
+  text_col: 'example_sent:technology'
+  ref_col: "company"
+  sep: ','

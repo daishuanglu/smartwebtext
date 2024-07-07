@@ -10,7 +10,7 @@ import pandas as pd
 OUTPUT_DIR = 'evaluation/prnews/tte_embedding_projection'
 
 
-def load_eval_samples(eval_data_path: str, query_col: str):
+def load_eval_samples(eval_data_path: str, ref_col: str, query_col: str):
     df = pd.read_csv(
         eval_data_path, 
         dtype=str, 
@@ -18,8 +18,8 @@ def load_eval_samples(eval_data_path: str, query_col: str):
         parse_dates=False, 
         keep_default_na=False, 
         na_values=[])
-    df = df.sample(frac=0.01)
-    return df[query_col].to_list()
+    df = df.sample(frac=0.1)
+    return list(set(df[ref_col])), df[query_col].to_list()
 
 
 def main():
@@ -36,17 +36,17 @@ def main():
     model_obj = train_utils.load(model_obj, latest_ckpt_path)
     model_obj.eval()
     # Company embeddings
-    with open(config['item_vocab_path'], 'r') as f:
-        ref_vocab = json.load(f)
-    all_companies = ['' for _ in ref_vocab]
-    for name, idx in ref_vocab.items():
-        all_companies[idx] = name
-    company_embeddings = model_obj.item_embedding.data.weights
+    eval_companies, eval_news = load_eval_samples(
+        config['val_data_path'], config['ref_col'], 'Title')
+    eval_companies = list(set(eval_companies))
+    print(len(eval_news), ' news, ', len(eval_companies), ' companies.')
+    company_embeddings = model_obj.item_model({config['ref_col']: eval_companies})
+    company_embeddings = company_embeddings.detach().cpu().numpy()
     visual_utils.tensorboard_text_embedding(
-        os.path.join(OUTPUT_DIR, 'companies'), all_companies, company_embeddings)
+        os.path.join(OUTPUT_DIR, 'companies'), eval_companies, company_embeddings)
     # News embeddings
-    eval_news = load_eval_samples(config['val_data_path'], 'Title')
-    news_embeddings = model_obj.query_model({config['ref_col']: eval_news})
+    news_embeddings = model_obj.query_model({config['query_col']: eval_news})
+    news_embeddings = news_embeddings.detach().cpu().numpy()
     visual_utils.tensorboard_text_embedding(
         os.path.join(OUTPUT_DIR, 'news'), eval_news, news_embeddings)
 
