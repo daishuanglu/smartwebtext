@@ -61,10 +61,20 @@ class websearch():
             f.write(TABLE_COL_BREAK.join(websearch.HEADERS) + '\n')
         self.titles = []
 
-    def load_body(line: str):
-        i = websearch.HEADERS.index('Body')
-        contents = line.split(TABLE_COL_BREAK)
-        return '\n'.join(contents[i].split(TEXT_LINE_BREAK))
+    def load_key(file_path: str, key: str):
+        cur = ''
+        j = websearch.HEADERS.index(key)
+        with open(file_path, 'r') as fp:
+            for i, line in enumerate(fp):
+                line: str = line.strip()
+                if i > 0:
+                    cur += ' ' + line
+                    if line.endswith('.html'):
+                        cur = cur.replace('\n', ' ')
+                        cells = cur.split('\t')
+                        contents = cells[j].split(TEXT_LINE_BREAK)
+                        yield '\n'.join(contents)
+                        cur = ''
 
     def _containRule(self, sentence, center_word):
         if center_word not in sentence:

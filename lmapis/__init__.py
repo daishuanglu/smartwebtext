@@ -44,9 +44,13 @@ class LLMCLient():
                 return message['contents']
 
     def parse_content_to_json(self, raw_response: str):
-        output = json.loads(raw_response)
-        return output
-    
+        try:
+            output = json.loads(raw_response)
+            return output
+        except Exception as e:
+            print(e)
+            print('raw llm response: ', raw_response)
+
     def make_request(self):
         raise NotImplementedError(
             "The LLM make request function must be instantiated in the child client.")
@@ -63,7 +67,9 @@ class LLMCLient():
                 self._cache(prp_string, resp, contents)
             results = []
             for content in contents:
-                results.extend(self.parse_content_to_json(content))
+                json_dicts = self.parse_content_to_json(content)
+                if json_dicts is not None:
+                    results.extend(json_dicts)
             return results
         except Exception as e:
             print(e)

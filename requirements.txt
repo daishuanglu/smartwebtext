@@ -1,3 +1,5 @@
 llamaapi
 openai
 anthropic
+blake3
+python-dotenv

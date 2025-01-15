@@ -10,26 +10,27 @@ from utils.prnews import websearch
 from utils import string_utils
 
 
-OUTPUT_DIR = 'D://mlprojs/smartwebtext/newsdata/knowledge_graph'
-INPUT_DIR = 'D://mlprojs/smartwebtext/newsdata/news'
+OUTPUT_DIR = '/mnt/d/mlprojs/smartwebtext/newsdata/knowledge_graph'
+INPUT_DIR = '/mnt/d/mlprojs/smartwebtext/newsdata/news'
 LIMIT = None
 
 
 def extract_pairs(lm: LLMCLient, list_of_search_files: List[str], output_dir: str):
-    for fpath in tqdm(list_of_search_files, desc=f'run {lm.model_name}'):
+    os.makedirs(os.path.join(OUTPUT_DIR, lm.model_name), exist_ok=True)
+    nfiles = len(list_of_search_files)
+    for i, fpath in enumerate(list_of_search_files):
         fbase = os.path.splitext(os.path.basename(fpath))[0]
         pairs = [[]]
-        for il, line in enumerate(open(fpath, 'r')):
-            if il > 0:
-                news_article = websearch.load_body(line)
-                results = lm(news_article)
-                pairs.append(results)
+        news_articles = list(websearch.load_key(fpath, 'Body'))
+        for article in tqdm(news_articles, desc=f'run {lm.model_name} {i+1}/{nfiles}'):
+            results = lm(article)
+            pairs.append(results)
         output_path = os.path.join(output_dir, lm.model_name, fbase + '.json')
         with open(output_path, 'w') as fp:
             json.dump(pairs, fp)
 
 
-@dataclasses
+@dataclasses.dataclass
 class Extraction:
     company: str
     concept: str
@@ -70,7 +71,7 @@ def build_concepts(pairs_dir: str):
 
 
 if __name__ == '__main__':
-    
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     llm_clients = [
         sonnet.SonnetClient(), 
         llama.LlamaClient(),
