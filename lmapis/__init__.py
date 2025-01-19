@@ -43,7 +43,21 @@ class LLMCLient():
                 message = json.load(fp)
                 return message['contents']
 
+    def isvalid(self, line: str):
+        if "here is" in line.lower():
+            return False
+        if "here are" in line.lower():
+            return False
+        if "Note" in line:
+            return False
+        if "i can extract" in line.lower():
+            return False
+        return True 
+
     def parse_content_to_json(self, raw_response: str):
+        resp_lines = raw_response.split('\n')
+        resp_lines = [line for line in resp_lines if self.isvalid(line)]
+        raw_response = '\n'.join(resp_lines)
         try:
             output = json.loads(raw_response)
             return output

@@ -72,9 +72,10 @@ class websearch():
                     if line.endswith('.html'):
                         cur = cur.replace('\n', ' ')
                         cells = cur.split('\t')
-                        contents = cells[j].split(TEXT_LINE_BREAK)
-                        yield '\n'.join(contents)
-                        cur = ''
+                        if len(cells) == len(websearch.HEADERS):
+                            contents = cells[j].split(TEXT_LINE_BREAK)
+                            yield '\n'.join(contents)
+                            cur = ''
 
     def _containRule(self, sentence, center_word):
         if center_word not in sentence:

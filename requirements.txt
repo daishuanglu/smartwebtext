@@ -3,3 +3,4 @@ openai
 anthropic
 blake3
 python-dotenv
+bertopic

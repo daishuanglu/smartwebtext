@@ -12,7 +12,9 @@ from utils import string_utils
 
 OUTPUT_DIR = '/mnt/d/mlprojs/smartwebtext/newsdata/knowledge_graph'
 INPUT_DIR = '/mnt/d/mlprojs/smartwebtext/newsdata/news'
-LIMIT = None
+#OUTPUT_DIR = 'D://mlprojs/smartwebtext/newsdata/knowledge_graph'
+#INPUT_DIR = 'D://mlprojs/smartwebtext/newsdata/news'
+LIMIT = 34
 
 
 def extract_pairs(lm: LLMCLient, list_of_search_files: List[str], output_dir: str):
@@ -45,11 +47,12 @@ def load_extractions(pairs_dir):
             fpath = os.path.join(pairs_dir, fname)
             with open(fpath, 'r') as fp:
                 data = json.load(fp)
-                for i, lp in enumerate(data):
-                    if lp:
-                        sw = string_utils.stemmer.stem(lp['action'])
-                        extraction = Extraction(lp['company'], sw, fname, i)
-                        extractions.append(extraction)
+                for i, lps in enumerate(data):
+                    if lps:
+                        for lp in lps:
+                            sw = ' '.join([string_utils.stemmer.stem(w) for w in lp['action'].split()])
+                            extraction = Extraction(lp['company'], sw, fname, i)
+                            extractions.append(extraction)
     return extractions
 
 
@@ -60,13 +63,14 @@ def build_concepts(pairs_dir: str):
     """
     extractions: List[Extraction] = load_extractions(pairs_dir)
     df = pd.DataFrame()
-    for ext in extractions:
-        if ext.company not in df.index:
-            df.loc[ext.company] = 0
+    for ext in tqdm(extractions):
         if ext.concept not in df.columns:
             df[ext.concept] = 0
+        if ext.company not in df.index:
+            df.at[ext.company, ext.concept] = 0
         df.at[ext.company, ext.concept] += 1
     df.index.name = 'company'
+    df = df.fillna(0.0)
     return df
 
 
@@ -75,8 +79,8 @@ if __name__ == '__main__':
     llm_clients = [
         sonnet.SonnetClient(), 
         llama.LlamaClient(),
-        oai.OpenaiClient
-        ]
+        oai.OpenaiClient(),
+    ]
     scrapped_files = [os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR)
                       if f.endswith('.txt')]
     if LIMIT is not None:
