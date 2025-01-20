@@ -33,7 +33,6 @@ def read_config(config_file):
 
 
 def load(model, state_dict_path, strict=True):
-    #model = torch.load(model_obj_path, pickle_module=dill, encoding='utf-8')
     state_dict = torch.load(state_dict_path, map_location=torch.device(device))
     if 'pytorch-lightning_version' in state_dict.keys():
         state_dict = state_dict['state_dict']

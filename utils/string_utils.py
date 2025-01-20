@@ -13,21 +13,38 @@ import string
 from nltk import WordNetLemmatizer
 from multiprocessing import Pool
 from nltk.stem.snowball import SnowballStemmer
-
+from nltk.corpus import words
+import nltk
 import yaml
+
+
+def is_nltk_words_downloaded():
+    try:
+        nltk.data.find('corpora/words.zip')
+        return True
+    except LookupError:
+        return False
+
 
 def read_config(config_file):
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
     return config
 
+
 stemmer = SnowballStemmer("english")
 wnl = WordNetLemmatizer()
 rake=Rake()
-
+if not is_nltk_words_downloaded():
+    nltk.download('words')
 COMPANY_NAME_SUFFICES = [
     'inc', 'llc', 'ltd', 'limited', 'corp', 'corporation', 'l.p.'
     'llp', 'lp', 'incorporated', 'plc', 'lc', 'l.c', 'co', 'n.a.', 's.a.']
+
+
+def is_english_word(word):
+    return word.lower() in words.words()
+
 
 def remove_company_suffix(s):
     for suffix in COMPANY_NAME_SUFFICES:
@@ -38,6 +55,7 @@ def remove_company_suffix(s):
             s = s[:-len(suffix)-1]
             return s.strip()
     return s
+
 
 def lemmed_fast(text, lem_fn, cores=6):  # tweak cores as needed
     with Pool(processes=cores) as pool:
