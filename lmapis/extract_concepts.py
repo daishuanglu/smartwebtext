@@ -40,7 +40,7 @@ class Extraction:
     src_line_no: int
 
 
-def load_extractions(pairs_dir):
+def load_extractions(pairs_dir, stem=True):
     extractions = []
     for fname in os.listdir(pairs_dir):
         if fname.endswith('.json'):
@@ -50,7 +50,10 @@ def load_extractions(pairs_dir):
                 for i, lps in enumerate(data):
                     if lps:
                         for lp in lps:
-                            sw = ' '.join([string_utils.stemmer.stem(w) for w in lp['action'].split()])
+                            sw = lp['action']
+                            if stem:
+                                sw = ' '.join([
+                                    string_utils.stemmer.stem(w) for w in lp['action'].split()])
                             extraction = Extraction(lp['company'], sw, fname, i)
                             extractions.append(extraction)
     return extractions

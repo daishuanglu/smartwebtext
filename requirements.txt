@@ -6,3 +6,4 @@ python-dotenv
 bertopic
 fuzzywuzzy
 python-Levenshtein
+PyMuPDF

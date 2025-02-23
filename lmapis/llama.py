@@ -12,6 +12,51 @@ DEFAULT_RESP_TEMPLATE = [
     {'company': 'abc', 'action': 'analytics'},
     {'company': "dcb", 'action': "provided analytics platform"}]
 
+DEFAULT_LAWSUIT_RESP_TEMPLATE = '''
+[{"reason": "", "explanation": "", "related_sentences": ""}, ...]
+'''
+
+class LlamaLawsuitClient(lmapis.LLMCLient):
+    
+    def __init__(self,
+                 model='llama3.3-70b',
+                 example_response=DEFAULT_LAWSUIT_RESP_TEMPLATE):
+        super(LlamaLawsuitClient, self).__init__(model)
+        self.client = llamaapi.LlamaAPI(api_token=os.environ.get("LLAMA_API_KEY"))
+        self.resp_ep = example_response
+
+    @property
+    def model_name(self):
+        return 'llama_spac_lawsuit'
+
+    def make_request(self, corpus: str):
+        api_request_json = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"""
+                    You are a bussiness lawyer that understands reasons a lawsuit occurs against a
+                    Special Purpose Acquisition (SPAC) company. Read the following lawsuit filing
+                    document, list all the resons of a lawsuit, with an explanation why it is
+                    a valid reason according to the document and related sentences you can extract
+                    from the document. Format your answer in a json string of a list of dict. For
+                    example, {self.resp_ep}. Please make sure not add extra text strings so that I
+                    can load your response by json.loads(your_response).
+                    """
+                },
+                {
+                    "role": "user",
+                    "content": corpus
+                },
+            ],
+            "stream": False,
+            }
+        response = self.client.run(api_request_json)
+        resp_dict = json.loads(response.content.decode('utf-8'))
+        contents = [c['message']['content'] for c in resp_dict['choices']]
+        return contents, resp_dict
+    
 
 class LlamaClient(lmapis.LLMCLient):
     

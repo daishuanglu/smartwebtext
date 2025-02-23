@@ -4,6 +4,7 @@ import os
 import blake3
 import traceback
 from dotenv import load_dotenv
+from typing import List, Dict
 
 load_dotenv()
 
@@ -69,7 +70,7 @@ class LLMCLient():
         raise NotImplementedError(
             "The LLM make request function must be instantiated in the child client.")
 
-    def __call__(self, prompt_string_or_path: str):
+    def __call__(self, prompt_string_or_path: str) -> List[Dict]:
         prp_string = prompt_string_or_path
         if os.path.exists(prompt_string_or_path):
             with open(prompt_string_or_path) as fp:
